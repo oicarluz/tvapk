@@ -72,6 +72,10 @@ public final class DiscoverActivity extends Activity {
         root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         TextView hint=label("OK: detalhes  •  Segure OK: salvar  •  Menu: pesquisar  •  Voltar: início",12,false);
         hint.setTextColor(MUTED);root.addView(hint);
+        LinearLayout quick=new LinearLayout(this);quick.setOrientation(LinearLayout.HORIZONTAL);
+        root.addView(quick,new LinearLayout.LayoutParams(-1,52));
+        addFilter(quick,"TV ao vivo | UniTVnet",()->openUniSection("TV ao vivo"));
+        addFilter(quick,"Guia EPG | UniTVnet",()->openUniSection("Guia de programação"));
         showTabs();load();
     }
     private void addFilter(LinearLayout row,String name,Runnable r){
@@ -163,6 +167,21 @@ public final class DiscoverActivity extends Activity {
                 else if(which==2)saveMenu(it);
                 else if(which==3&&it.show()){store.seenSeason(it);Toast.makeText(this,"Temporada registrada",Toast.LENGTH_SHORT).show();}
             }).setNegativeButton("Fechar",null).show();
+    }
+    private void openUniSection(String section){
+        // Preserve the original signed UniTVnet application and its player.
+        Intent launch=getPackageManager().getLeanbackLaunchIntentForPackage(DiscoverData.PKG);
+        if(launch==null)launch=getPackageManager().getLaunchIntentForPackage(DiscoverData.PKG);
+        if(launch==null){
+            Toast.makeText(this,"UniTVnet não está instalado ou visível",Toast.LENGTH_LONG).show();
+            return;
+        }
+        try{
+            startActivity(launch);
+            Toast.makeText(this,"Acesse "+section+" no menu do UniTVnet.",Toast.LENGTH_LONG).show();
+        }catch(Exception ex){
+            Toast.makeText(this,"Não foi possível abrir o UniTVnet",Toast.LENGTH_LONG).show();
+        }
     }
     private void openUni(DiscoverData.Item it){
         Intent launch=getPackageManager().getLeanbackLaunchIntentForPackage(DiscoverData.PKG);
