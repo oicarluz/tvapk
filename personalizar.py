@@ -21,7 +21,7 @@ def once(s: str, old: str, new: str, label: str) -> str:
 
 
 def between(s: str, start: str, end: str, replacement: str, label: str) -> str:
-    if s.count(start) != 1 or s.count(end) != 1:
+    if s.count(start) != 1 or end not in s[s.index(start) + len(start):]:
         raise RuntimeError(f'{label}: bloco mudou na versao do projeto. Pare aqui.')
     a = s.index(start)
     b = s.index(end, a)
@@ -94,3 +94,127 @@ def patch_manifest(src: str) -> str:
 
 
 def patch_remote(src: str) -> str:
+
+    return once(src,
+        '@Override public void onAccessibilityEvent(AccessibilityEvent event) {}',
+        '@Override public void onAccessibilityEvent(AccessibilityEvent event) { PendingUniSearch.tryFill(this, event); }',
+        'evento de acessibilidade')
+
+def patch_remote_xml(src: str) -> str:
+    s = once(src, 'android:accessibilityEventTypes="typeWindowStateChanged"',
+        'android:accessibilityEventTypes="typeWindowStateChanged|typeViewFocused|typeWindowContentChanged"', 'eventos')
+    s = once(s, 'android:accessibilityFlags="flagRequestFilterKeyEvents"',
+        'android:accessibilityFlags="flagRequestFilterKeyEvents|flagReportViewIds"', 'flags')
+    return once(s, 'android:canRequestFilterKeyEvents="true"',
+        'android:canRequestFilterKeyEvents="true"\n    android:canRetrieveWindowContent="true"', 'permissao de acessibilidade')
+
+PENDING_JAVA = r"""package io.freemytv;
+import android.accessibilityservice.AccessibilityService;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.os.Bundle;
+import android.os.SystemClock;
+import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.ArrayDeque;
+
+/** Optional, user-authorized assist for a search explicitly initiated on the home screen. */
+final class PendingUniSearch {
+    private static final String PKG = "com.unitvnet.tvod";
+    private static final long TTL = 120000L;
+    private static long lastTry;
+    private static File pending(Context c) { return new File(c.getFilesDir(), "pending-unitvnet.txt"); }
+    static void remember(Context context, String title) {
+        if (title == null || title.trim().isEmpty()) return;
+        Context c = context.getApplicationContext();
+        try {
+            ClipboardManager cb = (ClipboardManager)c.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cb != null) cb.setPrimaryClip(ClipData.newPlainText("Filme", title));
+        } catch (RuntimeException ignored) {}
+        try (FileOutputStream out = new FileOutputStream(pending(c))) {
+            out.write((Long.toString(System.currentTimeMillis() + TTL) + "\n" + title).getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignored) {}
+    }
+    private static String read(Context c) {
+        try {
+            File f = pending(c);
+            if (!f.exists() || f.length() > 4096) return null;
+            String s = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+            int k = s.indexOf('\n');
+            if (k < 0) return null;
+            if (System.currentTimeMillis() > Long.parseLong(s.substring(0, k))) { f.delete(); return null; }
+            return s.substring(k + 1);
+        } catch (Exception ignored) { return null; }
+    }
+    static void tryFill(AccessibilityService service, AccessibilityEvent event) {
+        if (event == null || event.getPackageName() == null || !PKG.contentEquals(event.getPackageName())) return;
+        int type = event.getEventType();
+        if (type != AccessibilityEvent.TYPE_VIEW_FOCUSED
+            && type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
+            && type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastTry < 300) return;
+        lastTry = now;
+        String title = read(service);
+        if (title == null || title.isEmpty()) return;
+        AccessibilityNodeInfo root = service.getRootInActiveWindow();
+        if (root == null) return;
+        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
+        queue.add(root);
+        int visited = 0;
+        while (!queue.isEmpty() && visited++ < 120) {
+            AccessibilityNodeInfo node = queue.removeFirst();
+            if (node.isEditable() && node.isFocused() && !node.isPassword()) {
+                Bundle b = new Bundle();
+                b.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, title);
+                if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, b)) {
+                    pending(service).delete();
+                    return;
+                }
+            }
+            for (int i = 0; i < node.getChildCount(); i++) {
+                AccessibilityNodeInfo child = node.getChild(i);
+                if (child != null) queue.add(child);
+            }
+        }
+    }
+}
+"""
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        sys.exit("Uso: python3 personalizar.py pasta_do_projeto")
+    root = Path(sys.argv[1]).resolve()
+    manifest = root / 'app/AndroidManifest.xml'
+    recs = root / 'app/src/io/freemytv/Recs.java'
+    home = root / 'app/src/io/freemytv/HomeView.java'
+    remote = root / 'app/src/io/freemytv/RemoteKeyService.java'
+    cfg = root / 'app/res/xml/remote_key_service.xml'
+    pending = root / 'app/src/io/freemytv/PendingUniSearch.java'
+    paths = (manifest, recs, home, remote, cfg)
+    if not (root / "build.sh").is_file() or any(not p.is_file() for p in paths):
+        raise RuntimeError("Codigo-fonte Free My TV v1.3.0 ausente ou com estrutura diferente.")
+    originals = {p: p.read_text(encoding="utf-8") for p in paths}
+    if 'android:versionName="1.3"' not in originals[manifest]:
+        raise RuntimeError("Apenas Free My TV v1.3.0 e suportado.")
+    if MARKER in originals[recs] or pending.exists():
+        raise RuntimeError("Personalizacao ja aplicada.")
+    changes = {
+        manifest: patch_manifest(originals[manifest]),
+        recs: patch_recs(originals[recs]),
+        home: patch_home(originals[home]),
+        remote: patch_remote(originals[remote]),
+        cfg: patch_remote_xml(originals[cfg]),
+    }
+    for path, source in changes.items():
+        path.write_text(source, encoding="utf-8")
+    pending.write_text(PENDING_JAVA, encoding="utf-8")
+    print("OK: TMDB independente / pt-BR / UniTVnet / clipboard / acessibilidade opcional")
+
+if __name__ == "__main__":
+    main()
