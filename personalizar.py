@@ -268,20 +268,28 @@ def main() -> None:
     manifest_text = re.sub(
         r'\s*<receiver\s+android:name="io\.freemytv\.HomeReceiver".*?</receiver>',
         '', manifest_text, flags=re.DOTALL)
-    # Launch directly into Discover v2 from Android TV's app list.
-    manifest_text = manifest_text.replace(
-        'android:name="io.freemytv.DiscoverActivity"\n            android:process=":home"\n            android:exported="false"',
-        'android:name="io.freemytv.DiscoverActivity"\n            android:process=":home"\n            android:exported="true"')
-    manifest_text = manifest_text.replace(
-        'android:label="Descobrir"\n            android:screenOrientation="landscape"\n            android:theme="@style/FreeMyTV.Home" />',
-        '''android:label="Discover v2 (Teste)"
-            android:screenOrientation="landscape"
-            android:theme="@style/FreeMyTV.Home">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
-        </activity>''')
+    # The TEST APK must open the ORIGINAL Free My TV home UI, not the
+    # independent Discover screen. Discover stays available with SEARCH/GUIDE.
+    # Settings is no longer the app-list entry in the isolated test.
+    settings_start = manifest_text.index('android:name="io.freemytv.SettingsActivity"')
+    settings_end = manifest_text.index('</activity>', settings_start)
+    settings_part = manifest_text[settings_start:settings_end]
+    settings_part = settings_part.replace(
+        '<category android:name="android.intent.category.LEANBACK_LAUNCHER" />', '')
+    settings_part = settings_part.replace(
+        '<category android:name="android.intent.category.LAUNCHER" />', '')
+    manifest_text = (manifest_text[:settings_start] + settings_part
+                     + manifest_text[settings_end:])
+    home_start = manifest_text.index('android:name="io.freemytv.HomeActivity"')
+    home_end = manifest_text.index('</activity>', home_start)
+    home_part = manifest_text[home_start:home_end]
+    home_part = home_part.replace(
+        '<category android:name="android.intent.category.DEFAULT" />',
+        '<category android:name="android.intent.category.DEFAULT" />\n'
+        '                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />\n'
+        '                <category android:name="android.intent.category.LAUNCHER" />', 1)
+    manifest_text = manifest_text[:home_start] + home_part + manifest_text[home_end:]
+    # Discover is an internal screen: it must never replace the familiar home UI.
     # Make the test application visibly distinct.
     manifest_text = manifest_text.replace(
         'android:label="Free My TV"', 'android:label="Free My TV (Teste)"')
