@@ -284,6 +284,11 @@ def main() -> None:
     manifest_text = manifest_text.replace(
         'android:label="Free My TV"', 'android:label="Free My TV (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
+    # Keep generated R.java in io.freemytv, where the original Java sources expect it.
+    build = root / 'build.sh'
+    build_text = build.read_text(encoding='utf-8')
+    build_text = once(build_text, '--java out/gen out/res.zip', '--java out/gen --custom-package io.freemytv out/res.zip', 'R.java package')
+    build.write_text(build_text, encoding='utf-8')
     print('ISOLATED TEST: ' + test_package + ' without HOME role or boot receiver.')
     print("OK: TMDB independente / pt-BR / UniTVnet / clipboard / acessibilidade opcional")
 
