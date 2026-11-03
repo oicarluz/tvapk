@@ -211,8 +211,41 @@ def main() -> None:
         remote: patch_remote(originals[remote]),
         cfg: patch_remote_xml(originals[cfg]),
     }
+    # Discovery v2 is a separate activity, leaving the existing HOME handler unchanged.
+    discovery_manifest = '''        <activity
+            android:name=".DiscoverActivity"
+            android:process=":home"
+            android:exported="false"
+            android:label="Descobrir"
+            android:screenOrientation="landscape"
+            android:theme="@style/FreeMyTV.Home" />
+'''
+    # The new activity is internal; the existing launcher remains the only HOME intent receiver.
+    changes[manifest] = once(changes[manifest],
+        '        <!-- The app\'s icon opens the settings',
+        discovery_manifest + '        <!-- The app\'s icon opens the settings',
+        'discover activity')
+    home_activity = root / 'app/src/io/freemytv/HomeActivity.java'
+    home_source = home_activity.read_text(encoding='utf-8')
+    home_source = once(home_source,
+        '        if (RemoteKeys.onKey(this, event)) return true;',
+        '''        if (event.getAction() == KeyEvent.ACTION_DOWN
+                && (event.getKeyCode() == KeyEvent.KEYCODE_SEARCH
+                    || event.getKeyCode() == KeyEvent.KEYCODE_GUIDE)) {
+            startActivity(new Intent(this, DiscoverActivity.class));
+            return true;
+        }
+        if (RemoteKeys.onKey(this, event)) return true;''',
+        'atalho Descobrir')
+    changes[home_activity] = home_source
     for path, source in changes.items():
         path.write_text(source, encoding="utf-8")
+    ext = Path(__file__).resolve().parent / 'extensions'
+    for name in ('DiscoverData.java', 'DiscoverActivity.java'):
+        path = ext / name
+        if not path.is_file():
+            raise RuntimeError(f'Extensao ausente: {path}')
+        (root / 'app/src/io/freemytv' / name).write_text(path.read_text(encoding='utf-8'), encoding='utf-8')
     pending.write_text(PENDING_JAVA, encoding="utf-8")
     print("OK: TMDB independente / pt-BR / UniTVnet / clipboard / acessibilidade opcional")
 
