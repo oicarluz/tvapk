@@ -227,14 +227,14 @@ def main() -> None:
         'discover activity')
     home_activity = root / 'app/src/io/freemytv/HomeActivity.java'
     home_source = home_activity.read_text(encoding='utf-8')
-    home_source = once(home_source,
+    changes[home] = once(changes[home],
         '                } else if (talkBack() && !widgets().isEmpty()) {',
         '''                } else if (dy > 0) {
                     activity.startActivity(new Intent(activity, EpgActivity.class));
                     return;
                 } else if (talkBack() && !widgets().isEmpty()) {''',
         'epg below original drawer')
-    home_source = once(home_source,
+    changes[home] = once(changes[home],
         '        if (Prefs.weather()) drawWeatherCard(c, weatherCard);',
         '''        rowTitle.setColor(drawerInk(0.9f));
         c.drawText("↓  TV AO VIVO  ·  CANAIS E PROGRAMACAO", 80 * k, 1040 * k, rowTitle);
