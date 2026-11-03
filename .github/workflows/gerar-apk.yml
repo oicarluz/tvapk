@@ -45,6 +45,21 @@ jobs:
           cd projeto
           export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           bash build.sh --generic
+      - name: Validar APK, assinatura e manifesto
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          APK="projeto/FreeMyTV.apk"
+          test -s "$APK"
+          "$BT/zipalign" -c -p 4 "$APK"
+          "$BT/apksigner" verify --verbose --print-certs "$APK"
+          "$BT/aapt" dump badging "$APK" | head -n 12
+          "$BT/aapt" dump xmltree "$APK" AndroidManifest.xml > /tmp/manifest.txt
+          grep -q 'DiscoverActivity' /tmp/manifest.txt
+          grep -q 'HomeActivity' /tmp/manifest.txt
+          grep -q 'io.freemytv' /tmp/manifest.txt
+          echo "OK: APK alinhado, assinatura valida, DiscoverActivity e HomeActivity presentes."
       - name: Publicar APK de homologacao (sem chave privada)
         uses: actions/upload-artifact@v4
         with:
