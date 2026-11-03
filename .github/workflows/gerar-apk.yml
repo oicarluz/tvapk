@@ -2,9 +2,10 @@ name: Compilar Free My TV + UniTVnet
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, 'feature/discover-v2']
     paths:
       - personalizar.py
+      - extensions/**
       - .github/workflows/gerar-apk.yml
 jobs:
   apk:
@@ -44,11 +45,10 @@ jobs:
           cd projeto
           export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           bash build.sh --generic
-      - name: Guardar APK e chave de assinatura para futuras atualizacoes
+      - name: Publicar APK de homologacao (sem chave privada)
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-unitvnet-v1
+          name: freemytv-discover-v2-test
           path: |
             projeto/FreeMyTV.apk
-            projeto/freemytv.keystore
           if-no-files-found: error
