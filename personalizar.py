@@ -247,6 +247,44 @@ def main() -> None:
             raise RuntimeError(f'Extensao ausente: {path}')
         (root / 'app/src/io/freemytv' / name).write_text(path.read_text(encoding='utf-8'), encoding='utf-8')
     pending.write_text(PENDING_JAVA, encoding="utf-8")
+
+    # ISOLATED TEST VARIANT: a separate Android application, not a HOME launcher.
+    # Do not touch the installed io.freemytv app or its data.
+    old_package = 'io.freemytv'
+    test_package = 'io.freemytv.discovertest'
+    manifest_text = manifest.read_text(encoding='utf-8')
+    manifest_text = manifest_text.replace('package="io.freemytv"', 'package="' + test_package + '"', 1)
+    manifest_text = manifest_text.replace('android:versionName="1.3"', 'android:versionName="2.0-test"', 1)
+    # Preserve fully qualified class names after changing the manifest's package.
+    import re
+    manifest_text = re.sub(r'android:name="\.(\w+)"',
+        lambda match: 'android:name="' + old_package + '.' + match.group(1) + '"',
+        manifest_text)
+    # Remove the HOME role from the test build, and prevent boot receivers from taking control.
+    manifest_text = manifest_text.replace(
+        '<category android:name="android.intent.category.HOME" />', '')
+    manifest_text = re.sub(
+        r'\s*<receiver\s+android:name="io\.freemytv\.HomeReceiver".*?</receiver>',
+        '', manifest_text, flags=re.DOTALL)
+    # Launch directly into Discover v2 from Android TV's app list.
+    manifest_text = manifest_text.replace(
+        'android:name="io.freemytv.DiscoverActivity"\n            android:process=":home"\n            android:exported="false"',
+        'android:name="io.freemytv.DiscoverActivity"\n            android:process=":home"\n            android:exported="true"')
+    manifest_text = manifest_text.replace(
+        'android:label="Descobrir"\n            android:screenOrientation="landscape"\n            android:theme="@style/FreeMyTV.Home" />',
+        '''android:label="Discover v2 (Teste)"
+            android:screenOrientation="landscape"
+            android:theme="@style/FreeMyTV.Home">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>''')
+    # Make the test application visibly distinct.
+    manifest_text = manifest_text.replace(
+        'android:label="Free My TV"', 'android:label="Free My TV (Teste)"')
+    manifest.write_text(manifest_text, encoding='utf-8')
+    print('ISOLATED TEST: ' + test_package + ' without HOME role or boot receiver.')
     print("OK: TMDB independente / pt-BR / UniTVnet / clipboard / acessibilidade opcional")
 
 if __name__ == "__main__":
