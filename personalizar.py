@@ -255,6 +255,8 @@ def main() -> None:
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = manifest_text.replace('package="io.freemytv"', 'package="' + test_package + '"', 1)
     manifest_text = manifest_text.replace('android:versionName="1.3"', 'android:versionName="2.0-test"', 1)
+    manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
+    manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Preserve fully qualified class names after changing the manifest's package.
     import re
     manifest_text = re.sub(r'android:name="\.(\w+)"',
