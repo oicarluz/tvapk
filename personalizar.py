@@ -228,6 +228,19 @@ def main() -> None:
     home_activity = root / 'app/src/io/freemytv/HomeActivity.java'
     home_source = home_activity.read_text(encoding='utf-8')
     home_source = once(home_source,
+        '                } else if (talkBack() && !widgets().isEmpty()) {',
+        '''                } else if (dy > 0) {
+                    activity.startActivity(new Intent(activity, EpgActivity.class));
+                    return;
+                } else if (talkBack() && !widgets().isEmpty()) {''',
+        'epg below original drawer')
+    home_source = once(home_source,
+        '        if (Prefs.weather()) drawWeatherCard(c, weatherCard);',
+        '''        rowTitle.setColor(drawerInk(0.9f));
+        c.drawText("↓  TV AO VIVO  ·  CANAIS E PROGRAMACAO", 80 * k, 1040 * k, rowTitle);
+        if (Prefs.weather()) drawWeatherCard(c, weatherCard);''',
+        'epg drawer hint')
+    home_source = once(home_source,
         '        if (RemoteKeys.onKey(this, event)) return true;',
         '''        if (event.getAction() == KeyEvent.ACTION_DOWN
                 && (event.getKeyCode() == KeyEvent.KEYCODE_SEARCH
@@ -241,7 +254,7 @@ def main() -> None:
     for path, source in changes.items():
         path.write_text(source, encoding="utf-8")
     ext = Path(__file__).resolve().parent / 'extensions'
-    for name in ('DiscoverData.java', 'DiscoverActivity.java'):
+    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java'):
         path = ext / name
         if not path.is_file():
             raise RuntimeError(f'Extensao ausente: {path}')
@@ -268,6 +281,18 @@ def main() -> None:
     manifest_text = re.sub(
         r'\s*<receiver\s+android:name="io\.freemytv\.HomeReceiver".*?</receiver>',
         '', manifest_text, flags=re.DOTALL)
+    # EPG screen is reachable by pressing DOWN again from the original drawer.
+    epg_activity = '''        <activity
+            android:name="io.freemytv.EpgActivity"
+            android:process=":home"
+            android:exported="false"
+            android:label="TV ao vivo e programação"
+            android:screenOrientation="landscape"
+            android:theme="@style/FreeMyTV.Home" />
+'''
+    manifest_text = manifest_text.replace(
+        '        <!-- The app\'s icon opens the settings',
+        epg_activity + '        <!-- The app\'s icon opens the settings', 1)
     # The TEST APK must open the ORIGINAL Free My TV home UI, not the
     # independent Discover screen. Discover stays available with SEARCH/GUIDE.
     # Settings is no longer the app-list entry in the isolated test.
