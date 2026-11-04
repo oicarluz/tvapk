@@ -250,7 +250,7 @@ def main() -> None:
     # External EPG is an internal activity only; Discover stays the TV entry point.
     manifest_text_epg = manifest.read_text(encoding="utf-8")
     manifest_text_epg = once(manifest_text_epg,
-        '        <!-- The app\\'s icon opens the settings',
+        "        <!-- The app's icon opens the settings",
         '''        <activity
             android:name=".EpgActivity"
             android:process=":home"
