@@ -25,7 +25,7 @@ import java.util.concurrent.Executors;
 
 /** Separate TV-first discovery screen. Never changes the HOME role or the existing launcher. */
 public final class DiscoverActivity extends Activity {
-    private static final String[] TABS={"Novidades","Descobrir","Para você","Minha Lista","Alertas"};
+    private static final String[] TABS={"Novidades","Descobrir","Para você","Minha Lista","Alertas","TV ao vivo"};
     private final ExecutorService worker=Executors.newSingleThreadExecutor();
     private final Handler main=new Handler(Looper.getMainLooper());
     private DiscoverData.Store store;
@@ -81,7 +81,7 @@ public final class DiscoverActivity extends Activity {
         toolbar.removeAllViews();
         for(int i=0;i<TABS.length;i++){
             final int n=i;
-            Button b=button((tab==i?"● ":"")+TABS[i],()->{tab=n;filter.query="";showTabs();load();});
+            Button b=button((tab==i?"● ":"")+TABS[i],()->{if(n==5){startActivity(new Intent(this,EpgActivity.class));return;}tab=n;filter.query="";showTabs();load();});
             LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,50,1);p.setMargins(3,2,3,2);
             toolbar.addView(b,p);
         }
