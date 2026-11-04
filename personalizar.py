@@ -241,20 +241,35 @@ def main() -> None:
     for path, source in changes.items():
         path.write_text(source, encoding="utf-8")
     ext = Path(__file__).resolve().parent / 'extensions'
-    for name in ('DiscoverData.java', 'DiscoverActivity.java'):
+    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java'):
         path = ext / name
         if not path.is_file():
             raise RuntimeError(f'Extensao ausente: {path}')
         (root / 'app/src/io/freemytv' / name).write_text(path.read_text(encoding='utf-8'), encoding='utf-8')
     pending.write_text(PENDING_JAVA, encoding="utf-8")
+    # External EPG is an internal activity only; Discover stays the TV entry point.
+    manifest_text_epg = manifest.read_text(encoding="utf-8")
+    manifest_text_epg = once(manifest_text_epg,
+        '        <!-- The app\\'s icon opens the settings',
+        '''        <activity
+            android:name=".EpgActivity"
+            android:process=":home"
+            android:exported="false"
+            android:label="Guia de TV ao vivo"
+            android:screenOrientation="landscape"
+            android:theme="@style/FreeMyTV.Home" />
+        <!-- The app's icon opens the settings''',
+        'registrar EPG')
+    manifest.write_text(manifest_text_epg)
+
 
     # ISOLATED TEST VARIANT: a separate Android application, not a HOME launcher.
     # Do not touch the installed io.freemytv app or its data.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.discovertest'
+    test_package = 'io.freemytv.discoverepg'
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = manifest_text.replace('package="io.freemytv"', 'package="' + test_package + '"', 1)
-    manifest_text = manifest_text.replace('android:versionName="1.3"', 'android:versionName="2.0-test"', 1)
+    manifest_text = manifest_text.replace('android:versionName="1.3"', 'android:versionName="2.1-epg-test"', 1)
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Preserve fully qualified class names after changing the manifest's package.
@@ -284,7 +299,7 @@ def main() -> None:
         </activity>''')
     # Make the test application visibly distinct.
     manifest_text = manifest_text.replace(
-        'android:label="Free My TV"', 'android:label="Free My TV (Teste)"')
+        'android:label="Free My TV"', 'android:label="Free My TV TV+EPG (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
     # Keep generated R.java in io.freemytv, where the original Java sources expect it.
     build = root / 'build.sh'
