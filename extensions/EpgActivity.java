@@ -148,7 +148,7 @@ public final class EpgActivity extends Activity {
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
         list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        TextView foot=text("↓ navegar pelos canais  ·  OK abre UniTVnet  ·  Voltar retorna ao Discover",12,false);
+        TextView foot=text("OK: abrir UniTVnet  ·  Segurar OK: fixar/desafixar canal  ·  Voltar: início",12,false);
         foot.setTextColor(MUTED);root.addView(foot);
         list.addView(text("Buscando canais abertos e fechados…",16,false));
         jobs.execute(this::loadAll);
@@ -277,7 +277,7 @@ public final class EpgActivity extends Activity {
         return out;
     }
     private void updateStatus(){
-        status.setText(all.size()+" canais disponíveis no EPG externo  ·  "+loadedFeeds+" fontes carregadas"+(failedFeeds>0?"  ·  "+failedFeeds+" indisponível(is)":""));
+        status.setText(all.size()+" canais no EPG externo  ·  "+HomeChannelPins.list(this).size()+"/30 fixados  ·  "+loadedFeeds+" fontes carregadas"+(failedFeeds>0?"  ·  "+failedFeeds+" indisponível(is)":""));
     }
     private void render(){
         if(!alive)return;
@@ -312,7 +312,7 @@ public final class EpgActivity extends Activity {
             details.setOrientation(LinearLayout.VERTICAL);details.setPadding(18,0,0,0);
             card.addView(details,new LinearLayout.LayoutParams(0,-2,1));
             String name=c.name.replace('-', ' ');
-            details.addView(text(name,18,true));
+            details.addView(text((HomeChannelPins.isPinned(this,c.key)?"★  ":"")+name,18,true));
             TextView now=text(c.now.isEmpty()?"Programação indisponível no momento":c.now,14,false);
             details.addView(now);
             if(c.start>0&&c.end>c.start){
@@ -336,6 +336,23 @@ public final class EpgActivity extends Activity {
                 if(focus){focusedKey=c.key;loadImage.run();}
             });
             card.setOnClickListener(v->openUni());
+            card.setOnLongClickListener(v->{
+                HomeChannelPins.Result outcome=HomeChannelPins.toggle(
+                    this,c.key,c.name,logoUrl(c));
+                String message;
+                switch(outcome){
+                    case PINNED: message="Canal fixado ("+HomeChannelPins.list(this).size()+"/30)."; break;
+                    case UNPINNED: message="Canal removido dos fixados."; break;
+                    case FULL: message="Limite de 30 canais. Desafixe outro canal primeiro."; break;
+                    default: message="Não foi possível salvar esse canal."; break;
+                }
+                Toast.makeText(this,message,Toast.LENGTH_SHORT).show();
+                if(outcome==HomeChannelPins.Result.PINNED||outcome==HomeChannelPins.Result.UNPINNED){
+                    focusedKey=c.key;
+                    render();
+                }
+                return true;
+            });
             if(focusedKey!=null&&focusedKey.equals(c.key)){card.requestFocus();restored=true;}
             else if(displayed==0&&focusedKey==null){card.requestFocus();restored=true;}
             displayed++;
@@ -378,30 +395,42 @@ public final class EpgActivity extends Activity {
         }
         jobs.execute(()->{
             Bitmap result=null;
-            HttpURLConnection connection=null;
-            try{
-                connection=(HttpURLConnection)new URL(url).openConnection();
-                connection.setConnectTimeout(5000);connection.setReadTimeout(6000);
-                if(connection.getResponseCode()==200){
-                    try(InputStream in=connection.getInputStream();ByteArrayOutputStream out=new ByteArrayOutputStream()){
-                        byte[] buf=new byte[4096];int n,total=0;
-                        while((n=in.read(buf))!=-1){
-                            total+=n;if(total>384000)break;
-                            out.write(buf,0,n);
-                        }
-                        if(total<=384000){
-                            byte[] raw=out.toByteArray();
-                            BitmapFactory.Options opt=new BitmapFactory.Options();
-                            opt.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(raw,0,raw.length,opt);
-                            opt.inSampleSize=1;
-                            while(opt.outWidth/opt.inSampleSize>240||opt.outHeight/opt.inSampleSize>240)opt.inSampleSize*=2;
-                            opt.inJustDecodeBounds=false;
-                            result=BitmapFactory.decodeByteArray(raw,0,raw.length,opt);
+            byte[] raw=HomeImageCache.read(this,url);
+            if(raw==null){
+                HttpURLConnection connection=null;
+                try{
+                    connection=(HttpURLConnection)new URL(url).openConnection();
+                    connection.setConnectTimeout(5000);
+                    connection.setReadTimeout(6000);
+                    if(connection.getResponseCode()==200){
+                        try(InputStream in=connection.getInputStream();
+                            ByteArrayOutputStream out=new ByteArrayOutputStream()){
+                            byte[] buf=new byte[4096];
+                            int n,total=0;
+                            while((n=in.read(buf))!=-1){
+                                total+=n;
+                                if(total>384000)break;
+                                out.write(buf,0,n);
+                            }
+                            if(total>0&&total<=384000)raw=out.toByteArray();
                         }
                     }
-                }
-            }catch(Exception ignored){}
-            finally{if(connection!=null)connection.disconnect();}
+                }catch(Exception ignored){}
+                finally{if(connection!=null)connection.disconnect();}
+            }
+            if(raw!=null){
+                try{
+                    BitmapFactory.Options opt=new BitmapFactory.Options();
+                    opt.inJustDecodeBounds=true;
+                    BitmapFactory.decodeByteArray(raw,0,raw.length,opt);
+                    opt.inSampleSize=1;
+                    while(opt.outWidth/opt.inSampleSize>240
+                        ||opt.outHeight/opt.inSampleSize>240)opt.inSampleSize*=2;
+                    opt.inJustDecodeBounds=false;
+                    result=BitmapFactory.decodeByteArray(raw,0,raw.length,opt);
+                    if(result!=null)HomeImageCache.write(this,url,raw);
+                }catch(Exception ignored){}
+            }
             Bitmap bitmap=result;
             if(bitmap!=null) {
                 synchronized(logos){logos.put(url,bitmap);}
