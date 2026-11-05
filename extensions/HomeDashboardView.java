@@ -166,6 +166,10 @@ final class HomeDashboardView extends LinearLayout {
                 activity.startActivity(new Intent(activity,MoviesActivity.class));
                 return;
             }
+            if(kind==2){
+                activity.startActivity(new Intent(activity,SeriesActivity.class));
+                return;
+            }
             Intent intent=new Intent(activity,DiscoverActivity.class);
             intent.putExtra("initial_kind",kind);
             activity.startActivity(intent);
