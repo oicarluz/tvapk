@@ -428,8 +428,12 @@ public final class EpgActivity extends Activity {
 
     private void render(){
         if(!alive)return;
-        final boolean restoreFocus=scroll!=null&&scroll.hasFocus();
-        final String restoreKey=restoreFocus?focusedKey:null;
+        View previous=scroll==null?null:scroll.findFocus();
+        // Keep the focused channel and scroll position when each source finishes.
+        // A "Carregar mais" action has its own focus transition.
+        final boolean restoreFocus=previous!=null&&previous.getTag() instanceof String;
+        final String restoreKey=restoreFocus?(String)previous.getTag():null;
+        final int previousScroll=scroll==null?0:scroll.getScrollY();
         final int generation=++viewGeneration;
         list.removeAllViews();
         ArrayList<Channel> channels=new ArrayList<>();
@@ -465,6 +469,7 @@ public final class EpgActivity extends Activity {
         for(int index=0;index<displayed;index++){
             Channel c=channels.get(index);
             LinearLayout row=new LinearLayout(this);
+            row.setTag(c.key);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
             row.setPadding(dp(9),dp(4),dp(8),dp(4));
@@ -546,6 +551,8 @@ public final class EpgActivity extends Activity {
             TvRemotePress.bind(row,()->openUni(),()->togglePin(c));
             if(restoreKey!=null&&restoreKey.equals(c.key))row.requestFocus();
         }
+        if(restoreFocus&&scroll!=null&&previousScroll>0)
+            scroll.post(()->scroll.scrollTo(0,previousScroll));
 
         if(displayed<channels.size()){
             final String nextKey=channels.get(displayed).key;
