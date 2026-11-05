@@ -14,6 +14,35 @@ TARGET_PKG = 'com.unitvnet.tvod'
 MARKER = 'UNITVNET_CUSTOM_v1'
 
 
+
+def build_identity(env=None):
+    """Return (is_release, app_id, version_name, version_code, label).
+
+    Release identity is immutable. Only the version may be incremented.
+    Production requires an existing private signing keystore before patching.
+    """
+    if env is None:
+        env = os.environ
+    mode = env.get('FREEMYTV_RELEASE_MODE', '')
+    if mode not in ('', '0', '1'):
+        raise RuntimeError('FREEMYTV_RELEASE_MODE aceita apenas 0 ou 1.')
+    if mode == '1':
+        app_id = 'io.freemytv.tvlauncher'
+        version_name = env.get('FREEMYTV_RELEASE_VERSION_NAME', '1.0.0')
+        version_code = env.get('FREEMYTV_RELEASE_VERSION_CODE', '100')
+        label = 'Free My TV'
+        signing_path = env.get('FREEMYTV_KEYSTORE', '')
+        if not signing_path or not Path(signing_path).is_file() or not env.get('FREEMYTV_KEYSTORE_PASS'):
+            raise RuntimeError('Release bloqueada: keystore permanente e senha obrigatorios.')
+        if not re.fullmatch(r'[1-9][0-9]*', version_code) or int(version_code) < 100:
+            raise RuntimeError('Release: versionCode deve ser um inteiro >= 100.')
+        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version_name):
+            raise RuntimeError('Release: versionName deve seguir X.Y.Z.')
+        return True, app_id, version_name, version_code, label
+    if env.get('FREEMYTV_RELEASE_VERSION_NAME') or env.get('FREEMYTV_RELEASE_VERSION_CODE'):
+        raise RuntimeError('Versao de release exige FREEMYTV_RELEASE_MODE=1.')
+    return False, 'io.freemytv.homep10test', '3.4-phase10-preview', '10', 'Free My TV Fase 10 (Teste)'
+
 def once(s: str, old: str, new: str, label: str) -> str:
     hits = s.count(old)
     if hits != 1:
@@ -337,30 +366,7 @@ def main() -> None:
     # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
     # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    # Preview stays isolated from both the existing launcher and the eventual
-    # permanent package. Only release mode may use the final applicationId.
-    release_mode = os.environ.get('FREEMYTV_RELEASE_MODE', '') == '1'
-    if release_mode:
-        test_package = 'io.freemytv.tvlauncher'
-        version_name = os.environ.get('FREEMYTV_RELEASE_VERSION_NAME', '1.0.0')
-        version_code = os.environ.get('FREEMYTV_RELEASE_VERSION_CODE', '100')
-        label = 'Free My TV'
-        # Fail closed: never generate a "production" package with a throwaway
-        # signing certificate. GitHub Secrets are supplied by a protected job.
-        signing_path = os.environ.get('FREEMYTV_KEYSTORE', '')
-        if not signing_path or not Path(signing_path).is_file() or not os.environ.get('FREEMYTV_KEYSTORE_PASS'):
-            raise RuntimeError('Release bloqueada: keystore permanente e senha obrigatorios. Use Fase 10 Teste para homologacao.')
-        if not re.fullmatch(r'[1-9][0-9]*', version_code) or int(version_code) < 100:
-            raise RuntimeError('Release: versionCode deve ser um inteiro >= 100.')
-        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version_name):
-            raise RuntimeError('Release: versionName deve seguir X.Y.Z.')
-    else:
-        if os.environ.get('FREEMYTV_RELEASE_VERSION_NAME') or os.environ.get('FREEMYTV_RELEASE_VERSION_CODE'):
-            raise RuntimeError('Versao de release exige FREEMYTV_RELEASE_MODE=1.')
-        test_package = 'io.freemytv.homep10test'
-        version_name = '3.4-phase10-preview'
-        version_code = '10'
-        label = 'Free My TV Fase 10 (Teste)'
+    release_mode, test_package, version_name, version_code, label = build_identity()
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = once(manifest_text, 'package="io.freemytv"',
         'package="' + test_package + '"', 'applicationId do launcher')
