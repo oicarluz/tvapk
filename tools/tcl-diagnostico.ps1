@@ -7,14 +7,14 @@
   Pode instalar um APK de homologacao e abrir sua HomeActivity isoladamente.
   Logs podem conter informacoes de outros apps: revise antes de compartilhar.
 .EXAMPLE
-  .\tcl-diagnostico.ps1 -ApkPath ".\FreeMyTV-Fase-8.apk"
+  .\tcl-diagnostico.ps1 -ApkPath ".\FreeMyTV-Fase-9.apk"
 .EXAMPLE
   .\tcl-diagnostico.ps1 -NoLaunch
 #>
 [CmdletBinding()]
 param(
     [string]$ApkPath = "",
-    [string]$PackageName = "io.freemytv.homep8test",
+    [string]$PackageName = "io.freemytv.homep9test",
     [string]$OutputDirectory = ".",
     [ValidateRange(0,120)][int]$ObservationSeconds = 8,
     [switch]$NoLaunch
@@ -49,15 +49,15 @@ if ($LASTEXITCODE -ne 0 -or $devices -notmatch '(?m)^\S+\s+device(?:\s|$)') {
 if (([regex]::Matches($devices,'(?m)^\S+\s+device(?:\s|$)')).Count -gt 1) {
     throw "Ha mais de um dispositivo conectado. Desconecte os extras para evitar testar a TV errada."
 }
-if ($PackageName -ne "io.freemytv.homep8test") {
-    throw "Este diagnostico aceita apenas o pacote de testes da Fase 8."
+if ($PackageName -ne "io.freemytv.homep9test") {
+    throw "Este diagnostico aceita apenas o pacote de testes da Fase 9."
 }
 if (-not (Test-Path -LiteralPath $OutputDirectory)) {
     New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 }
 $outDir = (Resolve-Path -LiteralPath $OutputDirectory).Path
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
-$prefix = Join-Path $outDir "tcl-freemytv-fase8-$stamp"
+$prefix = Join-Path $outDir "tcl-freemytv-fase9-$stamp"
 
 if ($ApkPath -ne "") {
     if (-not (Test-Path -LiteralPath $ApkPath -PathType Leaf)) {
