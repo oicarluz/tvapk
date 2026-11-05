@@ -4,6 +4,8 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.Context;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Intent;
 import android.content.ActivityNotFoundException;
 import android.content.res.ColorStateList;
@@ -18,6 +20,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.CookieManager;
+import android.webkit.WebStorage;
 import android.webkit.DownloadListener;
 import android.webkit.SslErrorHandler;
 import android.webkit.URLUtil;
@@ -49,6 +52,8 @@ public final class MainActivity extends Activity {
   private CajuzGuard guard;
   private FrameLayout appFrame;
   private View cover;
+  private View offlineView;
+  private FrameLayout webFrame;
   private boolean locked=false;
   private boolean lockEnabled(){return getPreferences(MODE_PRIVATE).getBoolean(LOCK_PREF,false);}
 
@@ -74,7 +79,7 @@ public final class MainActivity extends Activity {
   }
   private void setup() {
     if(web!=null) { web.destroy(); web=null; }
-    appFrame=null; cover=null;
+    appFrame=null; cover=null; offlineView=null; webFrame=null;
     ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BG);
     LinearLayout body=stack(); body.setPadding(px(26),px(65),px(26),px(26)); scroll.addView(body);
     TextView logo=label("C",43,Color.WHITE); logo.setGravity(Gravity.CENTER);
@@ -123,14 +128,23 @@ public final class MainActivity extends Activity {
     TextView more=label("⋮",26,Color.WHITE); more.setGravity(Gravity.CENTER);
     top.addView(more,size(px(46),-1));
     more.setOnClickListener(v->new AlertDialog.Builder(this)
-      .setItems(new String[]{"Atualizar página","Abrir no navegador","Trocar instalação"},(d,choice)->{
-        if(choice==0&&web!=null)web.reload();
-        if(choice==1&&web!=null)external(web.getUrl()==null?startUrl:web.getUrl());
-        if(choice==2)new AlertDialog.Builder(this).setTitle("Trocar instalação")
-          .setMessage("Configurar outro endereço do Cajuz? Seus dados continuam no WordPress.")
-          .setNegativeButton("Cancelar",null)
-          .setPositiveButton("Trocar",(dd,ww)->{ getPreferences(MODE_PRIVATE).edit().remove("site_url").apply(); startUrl=""; setup(); })
-          .show();
+      .setItems(new String[]{"Atualizar página","Compartilhar endereço","Copiar endereço","Abrir no navegador",
+        lockEnabled()?"Desativar bloqueio do app":"Ativar biometria / PIN",
+        "Encerrar sessão neste dispositivo","Trocar instalação"},(d,choice)->{
+        switch(choice){
+          case 0: if(web!=null)web.reload(); break;
+          case 1: shareCurrent(); break;
+          case 2: copyCurrent(); break;
+          case 3: external(currentAddress()); break;
+          case 4: changeLock(); break;
+          case 5: signOut(); break;
+          case 6: new AlertDialog.Builder(this).setTitle("Trocar instalação")
+            .setMessage("Conectar a outro WordPress? A sessão local será encerrada, mas os dados permanecerão no servidor.")
+            .setNegativeButton("Cancelar",null)
+            .setPositiveButton("Trocar",(dd,ww)->{
+              clearLocalSession(()->{getPreferences(MODE_PRIVATE).edit().remove("site_url").apply();startUrl="";locked=false;setup();});
+            }).show(); break;
+        }
       }).show());
     root.addView(top,size(-1,px(48)));
     progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
@@ -138,6 +152,7 @@ public final class MainActivity extends Activity {
     progress.setProgressTintList(ColorStateList.valueOf(GREEN));
     root.addView(progress,size(-1,px(3)));
     FrameLayout frame=new FrameLayout(this);
+    webFrame=frame;
     root.addView(frame,new LinearLayout.LayoutParams(-1,0,1));
     web=new WebView(this); frame.addView(web,new FrameLayout.LayoutParams(-1,-1));
     android.webkit.WebSettings settings=web.getSettings();
@@ -160,8 +175,10 @@ public final class MainActivity extends Activity {
         return true;
       }
       @Override public void onReceivedSslError(WebView v,SslErrorHandler handler,SslError error){ handler.cancel();Toast.makeText(MainActivity.this,"Certificado HTTPS inválido.",Toast.LENGTH_LONG).show(); }
+      @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){hideOffline();}
+      @Override public void onPageCommitVisible(WebView view,String url){hideOffline();}
       @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError error){
-        if(r.isForMainFrame())Toast.makeText(MainActivity.this,"Não foi possível carregar o Cajuz. Tente atualizar.",Toast.LENGTH_LONG).show();
+        if(r.isForMainFrame())showOffline();
       }
     });
     web.setWebChromeClient(new WebChromeClient(){
@@ -237,8 +254,67 @@ public final class MainActivity extends Activity {
     boolean enabled=lockEnabled();
     guard.verify(()->{
       getPreferences(MODE_PRIVATE).edit().putBoolean(LOCK_PREF,!enabled).apply();
+      if(enabled){locked=false;hideCover();}
       Toast.makeText(this,enabled?"Bloqueio desativado.":"Bloqueio ativado.",Toast.LENGTH_SHORT).show();
     });
+  }
+
+
+  private String currentAddress(){
+    String value=web==null?startUrl:web.getUrl();
+    return value==null||value.isEmpty()?startUrl:value;
+  }
+  private String addressForSharing(){
+    try{return Uri.parse(currentAddress()).buildUpon().clearQuery().fragment(null).build().toString();}
+    catch(Exception e){return startUrl;}
+  }
+  private void shareCurrent(){
+    Intent share=new Intent(Intent.ACTION_SEND);
+    share.setType("text/plain");
+    share.putExtra(Intent.EXTRA_TEXT,addressForSharing());
+    try{startActivity(Intent.createChooser(share,"Compartilhar endereço do Cajuz"));}
+    catch(Exception e){Toast.makeText(this,"Compartilhamento indisponível.",Toast.LENGTH_SHORT).show();}
+  }
+  private void copyCurrent(){
+    ClipboardManager clipboard=(ClipboardManager)getSystemService(Context.CLIPBOARD_SERVICE);
+    clipboard.setPrimaryClip(ClipData.newPlainText("Link Cajuz",addressForSharing()));
+    Toast.makeText(this,"Endereço copiado.",Toast.LENGTH_SHORT).show();
+  }
+  private void clearLocalSession(Runnable done){
+    CookieManager.getInstance().removeAllCookies(value->{
+      CookieManager.getInstance().flush();
+      WebStorage.getInstance().deleteAllData();
+      if(web!=null){web.clearCache(true);web.clearHistory();}
+      if(done!=null)done.run();
+    });
+  }
+  private void signOut(){
+    new AlertDialog.Builder(this).setTitle("Encerrar sessão?")
+      .setMessage("Os cookies e dados locais serão apagados. Isso não exclui sua conta ou os dados no WordPress.")
+      .setNegativeButton("Cancelar",null)
+      .setPositiveButton("Encerrar",(d,w)->clearLocalSession(()->{if(web!=null)web.loadUrl(startUrl);}))
+      .show();
+  }
+  private void showOffline(){
+    if(webFrame==null||offlineView!=null)return;
+    LinearLayout panel=stack();panel.setGravity(Gravity.CENTER);
+    panel.setPadding(px(26),px(26),px(26),px(26));
+    panel.setBackgroundColor(0xFFF7F9F8);
+    TextView title=label("Não foi possível conectar",22,BG);
+    title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+    title.setGravity(Gravity.CENTER);panel.addView(title,size(-1,px(56)));
+    TextView info=label("Confira sua conexão com a internet e o endereço do servidor Cajuz.",15,0xFF536159);
+    info.setGravity(Gravity.CENTER);panel.addView(info,size(-1,px(88)));
+    Button retry=new Button(this);retry.setAllCaps(false);retry.setText("Tentar novamente");
+    retry.setTextColor(Color.WHITE);retry.setBackgroundTintList(ColorStateList.valueOf(GREEN));
+    panel.addView(retry,size(-1,px(54)));
+    retry.setOnClickListener(v->{hideOffline();if(web!=null)web.reload();});
+    offlineView=panel;
+    webFrame.addView(panel,new FrameLayout.LayoutParams(-1,-1));
+  }
+  private void hideOffline(){
+    if(offlineView!=null&&webFrame!=null)webFrame.removeView(offlineView);
+    offlineView=null;
   }
 
   private void external(String url){
