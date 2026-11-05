@@ -404,86 +404,186 @@ public final class EpgActivity extends Activity {
     private void updateStatus(){
         status.setText(all.size()+" canais no EPG externo  ·  "+HomeChannelPins.list(this).size()+"/30 fixados  ·  "+loadedFeeds+" fontes carregadas"+(failedFeeds>0?"  ·  "+failedFeeds+" indisponível(is)":""));
     }
+    private boolean matches(Channel c){
+        if("Fixados".equals(category))return HomeChannelPins.isPinned(this,c.key);
+        if("Abertos".equals(category))return c.open;
+        if("Fechados".equals(category))return !c.open;
+        String n=normalize(c.name);
+        if("Esportes".equals(category))
+            return hasAny(n,"sport","esporte","espn","premiere","combate","xsports",
+                "sportv","band sports","bandsports","nba","futebol");
+        if("Filmes".equals(category))
+            return hasAny(n,"cine","movie","filme","film","telecine","megapix",
+                "hbo","tnt","space","amc","warner","universal","paramount");
+        if("Infantil".equals(category))
+            return hasAny(n,"kids","infantil","cartoon","nick","disney","baby",
+                "boomerang","discovery kids","gloob","toon");
+        if("Notícias".equals(category))
+            return hasAny(n,"news","noticias","noticia","jornal","cnn",
+                "senado","camara","jovem pan","bloomberg","bandnews");
+        return true;
+    }
+
+    private static boolean hasAny(String name,String... tokens){
+        for(String token:tokens)if(name.contains(token))return true;
+        return false;
+    }
+
+    private void togglePin(Channel c){
+        HomeChannelPins.Result result=HomeChannelPins.toggle(this,c.key,c.name,logoUrl(c));
+        String msg;
+        switch(result){
+            case PINNED: msg="★ Canal fixado na Home ("+HomeChannelPins.list(this).size()+"/30).";break;
+            case UNPINNED: msg="Canal removido da Home.";break;
+            case FULL: msg="Limite de 30 canais. Remova outro antes de fixar.";break;
+            default: msg="Não foi possível alterar este canal.";break;
+        }
+        Toast.makeText(this,msg,Toast.LENGTH_SHORT).show();
+        if(result==HomeChannelPins.Result.PINNED||result==HomeChannelPins.Result.UNPINNED){
+            focusedKey=c.key;
+            render();
+        }
+    }
+
     private void render(){
         if(!alive)return;
-        int generation=++viewGeneration;
+        final boolean restoreFocus=scroll!=null&&scroll.hasFocus();
+        final String restoreKey=restoreFocus?focusedKey:null;
+        final int generation=++viewGeneration;
         list.removeAllViews();
-        ArrayList<Channel> channels=new ArrayList<>(all.values());
-        channels.sort((a,b)->{
-            int r=rank(a)-rank(b);
-            return r!=0?r:a.name.compareToIgnoreCase(b.name);
-        });
-        updateStatus();
-        int displayed=0;
-        boolean restored=false;
-        for(Channel c:channels){
-            if("Abertos".equals(category)&&!c.open)continue;
-            if("Fechados".equals(category)&&c.open)continue;
-            if(displayed>=120)break;
-            LinearLayout card=new LinearLayout(this);card.setOrientation(LinearLayout.HORIZONTAL);
-            card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(14,11,14,11);
-            card.setBackground(shape(CARD));card.setFocusable(true);card.setMinimumHeight(96);
-            LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-1,-2);cp.setMargins(0,4,0,4);
-            list.addView(card,cp);
-            FrameLayout holder=new FrameLayout(this);
-            card.addView(holder,new LinearLayout.LayoutParams(100,76));
-            TextView fallback=text(c.name.length()>3?c.name.substring(0,3).toUpperCase(Locale.ROOT):c.name.toUpperCase(Locale.ROOT),14,true);
-            fallback.setGravity(Gravity.CENTER);fallback.setBackground(shape(0xff29384a));
-            holder.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
-            ImageView logo=new ImageView(this);
-            logo.setScaleType(ImageView.ScaleType.FIT_CENTER);logo.setVisibility(View.INVISIBLE);
-            holder.addView(logo,new FrameLayout.LayoutParams(-1,-1));
-            LinearLayout details=new LinearLayout(this);
-            details.setOrientation(LinearLayout.VERTICAL);details.setPadding(18,0,0,0);
-            card.addView(details,new LinearLayout.LayoutParams(0,-2,1));
-            String name=c.name.replace('-', ' ');
-            details.addView(text((HomeChannelPins.isPinned(this,c.key)?"★  ":"")+name,18,true));
-            TextView now=text(c.now.isEmpty()?"Programação indisponível no momento":c.now,14,false);
-            details.addView(now);
-            if(c.start>0&&c.end>c.start){
-                TextView timeLabel=text(time(c.start)+" – "+time(c.end),12,false);
-                timeLabel.setTextColor(MUTED);details.addView(timeLabel);
-                ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
-                progress.setMax(1000);
-                long elapsed=System.currentTimeMillis()-c.start, duration=c.end-c.start;
-                progress.setProgress((int)Math.max(0,Math.min(1000,1000L*elapsed/duration)));
-                details.addView(progress,new LinearLayout.LayoutParams(-1,5));
-            }
-            if(!c.next.isEmpty()){
-                TextView next=text("A seguir: "+c.next,12,false);next.setTextColor(MUTED);
-                details.addView(next);
-            }
-            final String imageUrl=logoUrl(c);
-            final Runnable loadImage=()->showLogo(imageUrl,logo,fallback,generation);
-            if(displayed<12)loadImage.run();
-            card.setOnFocusChangeListener((v,focus)->{
-                card.setBackground(shape(focus?FOCUS:CARD));
-                if(focus){focusedKey=c.key;loadImage.run();}
-            });
-            card.setOnClickListener(v->openUni());
-            card.setOnLongClickListener(v->{
-                HomeChannelPins.Result outcome=HomeChannelPins.toggle(
-                    this,c.key,c.name,logoUrl(c));
-                String message;
-                switch(outcome){
-                    case PINNED: message="Canal fixado ("+HomeChannelPins.list(this).size()+"/30)."; break;
-                    case UNPINNED: message="Canal removido dos fixados."; break;
-                    case FULL: message="Limite de 30 canais. Desafixe outro canal primeiro."; break;
-                    default: message="Não foi possível salvar esse canal."; break;
+        ArrayList<Channel> channels=new ArrayList<>();
+        if("Fixados".equals(category)){
+            for(HomeChannelPins.Channel pin:HomeChannelPins.list(this)){
+                Channel fromFeed=all.get(pin.key);
+                if(fromFeed==null){
+                    fromFeed=new Channel();
+                    fromFeed.key=pin.key;
+                    fromFeed.name=pin.name;
+                    fromFeed.logo=pin.logo;
+                    fromFeed.open=isOpen(pin.name);
                 }
-                Toast.makeText(this,message,Toast.LENGTH_SHORT).show();
-                if(outcome==HomeChannelPins.Result.PINNED||outcome==HomeChannelPins.Result.UNPINNED){
-                    focusedKey=c.key;
-                    render();
-                }
-                return true;
+                channels.add(fromFeed);
+            }
+        }else{
+            for(Channel c:all.values())if(matches(c))channels.add(c);
+            channels.sort((first,second)->{
+                int r=rank(first)-rank(second);
+                return r!=0?r:first.name.compareToIgnoreCase(second.name);
             });
-            if(focusedKey!=null&&focusedKey.equals(c.key)){card.requestFocus();restored=true;}
-            else if(displayed==0&&focusedKey==null){card.requestFocus();restored=true;}
-            displayed++;
         }
-        if(displayed==0)list.addView(text("Nenhum canal nessa categoria. Outras fontes podem estar carregando.",16,false));
+        updateStatus();
+        if(channels.isEmpty()){
+            TextView message=text("Nenhum canal nesta categoria. O EPG externo pode não oferecer programação para todos os canais.",14,false);
+            message.setTextColor(MUTED);
+            message.setPadding(dp(16),dp(18),dp(12),dp(18));
+            list.addView(message);
+            return;
+        }
+
+        int displayed=Math.min(channels.size(),visibleLimit);
+        for(int index=0;index<displayed;index++){
+            Channel c=channels.get(index);
+            LinearLayout row=new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(9),dp(4),dp(8),dp(4));
+            row.setBackground(shape(CARD));
+            row.setFocusable(true);
+            row.setClickable(true);
+            row.setContentDescription(c.name+". "+(c.now.isEmpty()?
+                "Programação não disponível":c.now)+
+                ". Pressione OK para abrir UniTVnet; segure OK para fixar.");
+            LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(-1,dp(67));
+            rp.setMargins(0,dp(2),0,dp(2));
+            list.addView(row,rp);
+
+            LinearLayout channel=new LinearLayout(this);
+            channel.setGravity(Gravity.CENTER_VERTICAL);
+            row.addView(channel,new LinearLayout.LayoutParams(dp(135),-1));
+            FrameLayout iconBox=new FrameLayout(this);
+            channel.addView(iconBox,new LinearLayout.LayoutParams(dp(44),dp(40)));
+            TextView fallback=text(c.name.substring(0,Math.min(3,c.name.length())).toUpperCase(Locale.ROOT),10,true);
+            fallback.setGravity(Gravity.CENTER);
+            fallback.setBackground(shape(0xff293a54));
+            iconBox.addView(fallback,new FrameLayout.LayoutParams(-1,-1));
+            ImageView logo=new ImageView(this);
+            logo.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            logo.setVisibility(View.INVISIBLE);
+            iconBox.addView(logo,new FrameLayout.LayoutParams(-1,-1));
+
+            TextView name=text((HomeChannelPins.isPinned(this,c.key)?"★  ":"")+c.name,13,true);
+            name.setSingleLine(false);
+            LinearLayout.LayoutParams nameLp=new LinearLayout.LayoutParams(0,-1,1);
+            nameLp.leftMargin=dp(7);
+            channel.addView(name,nameLp);
+
+            LinearLayout now=new LinearLayout(this);
+            now.setGravity(Gravity.CENTER_VERTICAL);
+            now.setPadding(dp(10),0,dp(7),0);
+            row.addView(now,new LinearLayout.LayoutParams(0,-1,2));
+            TextView program=text(c.now.isEmpty()?"Programação indisponível":c.now,14,true);
+            program.setMaxLines(2);
+            now.addView(program);
+
+            LinearLayout progressArea=new LinearLayout(this);
+            progressArea.setOrientation(LinearLayout.VERTICAL);
+            progressArea.setGravity(Gravity.CENTER_VERTICAL);
+            progressArea.setPadding(dp(6),0,dp(15),0);
+            row.addView(progressArea,new LinearLayout.LayoutParams(0,-1,1));
+            boolean hasTimes=c.end>c.start;
+            TextView times=text(hasTimes?time(c.start)+" – "+time(c.end):"Horário não informado",11,false);
+            times.setTextColor(MUTED);
+            progressArea.addView(times);
+            ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+            progress.setMax(1000);
+            if(hasTimes){
+                long fraction=1000L*(System.currentTimeMillis()-c.start)/(c.end-c.start);
+                progress.setProgress((int)Math.max(0,Math.min(1000,fraction)));
+            }else progress.setProgress(0);
+            LinearLayout.LayoutParams pp=new LinearLayout.LayoutParams(-1,dp(5));
+            pp.topMargin=dp(5);
+            progressArea.addView(progress,pp);
+
+            LinearLayout next=new LinearLayout(this);
+            next.setGravity(Gravity.CENTER_VERTICAL);
+            next.setPadding(dp(8),0,dp(4),0);
+            row.addView(next,new LinearLayout.LayoutParams(0,-1,1));
+            TextView nextProgram=text(c.next.isEmpty()?"A seguir: sem dados":"A seguir: "+c.next,11,false);
+            nextProgram.setTextColor(MUTED);
+            next.addView(nextProgram);
+
+            String imageUrl=logoUrl(c);
+            Runnable showImage=()->showLogo(imageUrl,logo,fallback,generation);
+            if(index<14)showImage.run();
+            row.setOnFocusChangeListener((view,focused)->{
+                row.setBackground(shape(focused?FOCUS:CARD));
+                if(focused){
+                    focusedKey=c.key;
+                    showImage.run();
+                }
+            });
+            TvRemotePress.bind(row,()->openUni(),()->togglePin(c));
+            if(restoreKey!=null&&restoreKey.equals(c.key))row.requestFocus();
+        }
+
+        if(displayed<channels.size()){
+            final String nextKey=channels.get(displayed).key;
+            Button more=menuButton("Carregar mais canais   ("+displayed+" de "+channels.size()+")",()->{
+                focusedKey=nextKey;
+                visibleLimit+=PAGE;
+                render();
+            });
+            LinearLayout.LayoutParams mp=new LinearLayout.LayoutParams(-1,dp(46));
+            mp.topMargin=dp(9);
+            list.addView(more,mp);
+        }
     }
+
+    @Override protected void onResume(){
+        super.onResume();
+        if(list!=null&&(!all.isEmpty()||!HomeChannelPins.list(this).isEmpty()))render();
+    }
+
     private static String logoUrl(Channel c){
         if(c.logo.startsWith("https://"))return c.logo;
         String n=normalize(c.name);
