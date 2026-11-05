@@ -1,0 +1,143 @@
+name: Free My TV - assinatura definitiva (somente manual)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmar_tcl:
+        description: "Digite TCL_APROVADA somente depois do teste na TV fisica"
+        required: true
+        type: string
+      version_code:
+        description: "Inteiro >=100, sempre maior a cada nova versao"
+        required: true
+        default: "100"
+        type: string
+      version_name:
+        description: "Versao X.Y.Z, por exemplo 1.0.0"
+        required: true
+        default: "1.0.0"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  assinar:
+    name: Validar homologacao e assinar APK
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: production
+    env:
+      SIGNING_B64: ${{ secrets.FREEMYTV_KEYSTORE_BASE64 }}
+      SIGNING_PASSWORD: ${{ secrets.FREEMYTV_KEYSTORE_PASS }}
+      EXPECTED_CERT: ${{ vars.FREEMYTV_RELEASE_CERT_SHA256 }}
+      RELEASE_CODE: ${{ inputs.version_code }}
+      RELEASE_NAME: ${{ inputs.version_name }}
+      CONFIRMACAO: ${{ inputs.confirmar_tcl }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bloqueios de publicacao e assinatura
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$CONFIRMACAO" = "TCL_APROVADA" || { echo "::error::Teste fisico TCL nao confirmado."; exit 1; }
+          [[ "$RELEASE_CODE" =~ ^[1-9][0-9]*$ ]] && [ "$RELEASE_CODE" -ge 100 ] || {
+            echo "::error::versionCode invalido ou inferior a 100"; exit 1;
+          }
+          [[ "$RELEASE_NAME" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+            echo "::error::versionName invalido. Use X.Y.Z"; exit 1;
+          }
+          test -n "$SIGNING_B64" && test -n "$SIGNING_PASSWORD" || {
+            echo "::error::Secrets de assinatura permanente ausentes"; exit 1;
+          }
+          NORMALIZED="$(printf '%s' "$EXPECTED_CERT" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          [[ "$NORMALIZED" =~ ^[0-9a-f]{64}$ ]] || {
+            echo "::error::FREEMYTV_RELEASE_CERT_SHA256 ausente ou invalido"; exit 1;
+          }
+          umask 077
+          printf '%s' "$SIGNING_B64" | base64 --decode > "$RUNNER_TEMP/freemytv-release.jks"
+          test -s "$RUNNER_TEMP/freemytv-release.jks" || {
+            echo "::error::Keystore ilegivel"; exit 1;
+          }
+          echo "Assinatura permanente fornecida via Secrets; confirmacao TCL validada."
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Preparar Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ANDROID_HOME="$ANDROID_SDK_ROOT"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'platforms;android-34' 'build-tools;35.0.0'
+      - name: Checar identidade e clonar o codigo oficial
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile personalizar.py
+          python3 tests/phase10_identity.py
+          git clone --depth 1 --branch v1.3.0 https://github.com/simbasjungles/free-my-tv.git projeto
+      - name: Aplicar personalizacao de producao (somente com chave presente)
+        shell: bash
+        env:
+          FREEMYTV_RELEASE_MODE: "1"
+          FREEMYTV_RELEASE_VERSION_CODE: ${{ inputs.version_code }}
+          FREEMYTV_RELEASE_VERSION_NAME: ${{ inputs.version_name }}
+          FREEMYTV_KEYSTORE: ${{ runner.temp }}/freemytv-release.jks
+          FREEMYTV_KEYSTORE_PASS: ${{ secrets.FREEMYTV_KEYSTORE_PASS }}
+        run: |
+          set -euo pipefail
+          python3 personalizar.py projeto
+          python3 tests/phase6_smoke.py projeto io.freemytv.tvlauncher
+          python3 tests/phase7_smoke.py projeto io.freemytv.tvlauncher "$RELEASE_CODE" "$RELEASE_NAME"
+          python3 tests/phase8_smoke.py projeto io.freemytv.tvlauncher "$RELEASE_CODE" "$RELEASE_NAME"
+      - name: Compilar e assinar com a chave definitiva
+        shell: bash
+        env:
+          FREEMYTV_KEYSTORE: ${{ runner.temp }}/freemytv-release.jks
+          FREEMYTV_KEYSTORE_PASS: ${{ secrets.FREEMYTV_KEYSTORE_PASS }}
+        run: |
+          set -euo pipefail
+          test -s "$FREEMYTV_KEYSTORE"
+          trap 'rm -f "$FREEMYTV_KEYSTORE"' EXIT
+          cd projeto
+          bash build.sh --generic
+      - name: Verificar APK e o certificado fixado
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT="$ANDROID_HOME/build-tools/35.0.0"
+          APK="projeto/FreeMyTV.apk"
+          test -s "$APK"
+          "$BT/zipalign" -c -p 4 "$APK"
+          CERT="$("$BT/apksigner" verify --verbose --print-certs "$APK" |
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -n 1 |
+            tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          EXPECTED="$(printf '%s' "$EXPECTED_CERT" | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')"
+          test -n "$CERT" && test "$CERT" = "$EXPECTED" || {
+            echo "::error::O certificado de assinatura nao corresponde ao autorizado"; exit 1;
+          }
+          "$BT/aapt" dump badging "$APK" > /tmp/release-badging.txt
+          grep -F "package: name='io.freemytv.tvlauncher' versionCode='$RELEASE_CODE' versionName='$RELEASE_NAME'" /tmp/release-badging.txt
+          grep -F "launchable-activity: name='io.freemytv.HomeActivity'" /tmp/release-badging.txt
+          echo "Certificado de producao verificado: $CERT"
+      - name: Preparar artefato sem arquivos secretos
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp projeto/FreeMyTV.apk "dist/FreeMyTV-$RELEASE_NAME.apk"
+          cp projeto/LICENSE dist/LICENSE-MIT-Free-My-TV.txt
+          cp docs/FASE-10-RELEASE.md dist/LEIA-ME.txt
+          (cd dist && sha256sum "FreeMyTV-$RELEASE_NAME.apk" > SHA256.txt)
+          test -z "$(find dist -type f -name '*.jks' -o -name '*.keystore')"
+      - name: Disponibilizar APK para instalacao manual
+        uses: actions/upload-artifact@v4
+        with:
+          name: freemytv-assinado-release
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
