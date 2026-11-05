@@ -208,8 +208,8 @@ def main() -> None:
         manifest: patch_manifest(originals[manifest]),
         recs: patch_recs(originals[recs]),
         home: patch_home(originals[home]),
-        remote: patch_remote(originals[remote]),
-        cfg: patch_remote_xml(originals[cfg]),
+        # Keep the original remote-buttons service untouched. The opt-in
+        # UniTVnet service is separate and never toggled by HomeMode.
     }
     # Discovery v2 is a separate activity, leaving the existing HOME handler unchanged.
     discovery_manifest = '''        <activity
@@ -260,12 +260,26 @@ def main() -> None:
     for path, source in changes.items():
         path.write_text(source, encoding="utf-8")
     ext = Path(__file__).resolve().parent / 'extensions'
-    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java', 'PendingUniChannel.java'):
+    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java', 'PendingUniChannel.java', 'UniChannelService.java'):
         path = ext / name
         if not path.is_file():
             raise RuntimeError(f'Extensao ausente: {path}')
         (root / 'app/src/io/freemytv' / name).write_text(path.read_text(encoding='utf-8'), encoding='utf-8')
     pending.write_text(PENDING_JAVA, encoding="utf-8")
+    # Dedicated service: only receives UniTVnet events, not remote key presses.
+    unitv_xml = ext / 'unitv_channel_service.xml'
+    if not unitv_xml.is_file():
+        raise RuntimeError("Configuracao de acessibilidade UniTVnet ausente.")
+    (root / 'app/res/xml/unitv_channel_service.xml').write_text(
+        unitv_xml.read_text(encoding='utf-8'), encoding='utf-8')
+    strings = root / 'app/res/values/strings.xml'
+    strings_src = strings.read_text(encoding='utf-8')
+    strings_src = once(strings_src, '</resources>',
+        '    <string name="unitv_channel_service_description">'
+        'Busca por canais no UniTVnet quando voce solicita. '
+        'Nao le outras aplicacoes e nao acessa senhas.'
+        '</string>\\n</resources>', 'descricao do servico')
+    strings.write_text(strings_src, encoding='utf-8')
     # External EPG is an internal activity only; Discover stays the TV entry point.
     manifest_text_epg = manifest.read_text(encoding="utf-8")
     manifest_text_epg = once(manifest_text_epg,
@@ -277,6 +291,19 @@ def main() -> None:
             android:label="Guia de TV ao vivo"
             android:screenOrientation="landscape"
             android:theme="@style/FreeMyTV.Home" />
+        <service
+            android:name=".UniChannelService"
+            android:process=":assist"
+            android:exported="true"
+            android:label="Free My TV · Busca no UniTVnet"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/unitv_channel_service" />
+        </service>
         <!-- The app's icon opens the settings''',
         'registrar EPG')
     manifest.write_text(manifest_text_epg)
@@ -286,12 +313,12 @@ def main() -> None:
     # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
     # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.unitvchanneltest'
+    test_package = 'io.freemytv.unitvassisttest'
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = once(manifest_text, 'package="io.freemytv"',
         'package="' + test_package + '"', 'applicationId do launcher')
     manifest_text = once(manifest_text, 'android:versionName="1.3"',
-        'android:versionName="2.3-channel-assist"', 'versao')
+        'android:versionName="2.4-unitv-assist"', 'versao')
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Code remains in the io.freemytv Java namespace. Explicit components
@@ -349,6 +376,13 @@ def main() -> None:
     mode_text = once(mode_text, 'static final String PKG = "io.freemytv";',
         'static final String PKG = "' + test_package + '";',
         'HomeMode pacote novo')
+    # Fix the original project's remote-service component calculation for
+    # renamed Android application IDs. This does NOT auto-enable our dedicated
+    # UniTVnet accessibility service.
+    mode_text = once(mode_text,
+        'private static final String REMOTE_SERVICE = PKG + "/" + PKG + ".RemoteKeyService";',
+        'private static final String REMOTE_SERVICE = PKG + "/io.freemytv.RemoteKeyService";',
+        'controle remoto pacote teste')
     for kind in ('HomeActivity', 'SettingsActivity', 'RemoteKeyService', 'NowPlaying'):
         mode_text = once(mode_text, 'PKG + "/" + PKG + ".' + kind + '"',
             'PKG + "/io.freemytv.' + kind + '"', kind + ' componente')
