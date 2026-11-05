@@ -352,7 +352,7 @@ def main() -> None:
             raise RuntimeError('Release bloqueada: keystore permanente e senha obrigatorios. Use Fase 10 Teste para homologacao.')
         if not re.fullmatch(r'[1-9][0-9]*', version_code) or int(version_code) < 100:
             raise RuntimeError('Release: versionCode deve ser um inteiro >= 100.')
-        if not re.fullmatch(r'[0-9]+\\.[0-9]+\\.[0-9]+', version_name):
+        if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version_name):
             raise RuntimeError('Release: versionName deve seguir X.Y.Z.')
     else:
         if os.environ.get('FREEMYTV_RELEASE_VERSION_NAME') or os.environ.get('FREEMYTV_RELEASE_VERSION_CODE'):
