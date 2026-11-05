@@ -98,7 +98,7 @@ abstract class MediaCatalogActivity extends Activity {
     private Button retry,sortButton;
     private ProgressBar loadingView;
     private int genre=0,sort=0,nextPage=1,generation=0;
-    private boolean loading=false,hasMore=true,alive=true;
+    private boolean loading=false,hasMore=true,alive=true,autoLoadBlocked=false;
     private String query="";
 
     private int dp(float size){return Math.round(getResources().getDisplayMetrics().density*size);}
@@ -176,7 +176,7 @@ abstract class MediaCatalogActivity extends Activity {
         loadingView=new ProgressBar(this);
         loadingView.setVisibility(View.GONE);
         controls.addView(loadingView,new LinearLayout.LayoutParams(dp(28),dp(28)));
-        retry=actionButton("Tentar novamente",()->loadPage());
+        retry=actionButton("Tentar novamente",()->retryPage());
         retry.setVisibility(View.GONE);
         LinearLayout.LayoutParams retryLp=new LinearLayout.LayoutParams(dp(155),dp(30));
         retryLp.leftMargin=dp(8);
@@ -325,6 +325,7 @@ abstract class MediaCatalogActivity extends Activity {
         nextPage=1;
         hasMore=true;
         loading=false;
+        autoLoadBlocked=false;
         if(adapter!=null)adapter.notifyDataSetChanged();
         if(grid!=null)grid.setSelection(0);
         if(retry!=null)retry.setVisibility(View.GONE);
@@ -348,8 +349,14 @@ abstract class MediaCatalogActivity extends Activity {
         return path;
     }
 
+    /** Explicit retry after an API failure, never triggered by list re-layout. */
+    private void retryPage(){
+        autoLoadBlocked=false;
+        loadPage();
+    }
+
     private void loadPage(){
-        if(!alive||loading||!hasMore)return;
+        if(!alive||loading||!hasMore||autoLoadBlocked)return;
         if(Recs.key()==null||Recs.key().isEmpty()){
             hasMore=false;
             status.setText("Cadastre sua chave TMDB nos Ajustes do Free My TV para carregar "+noun()+".");
@@ -386,10 +393,13 @@ abstract class MediaCatalogActivity extends Activity {
                 loading=false;
                 loadingView.setVisibility(View.GONE);
                 if(failure!=null){
+                    // A scroll callback fired by a layout pass must NOT cause
+                    // endless network retries after TMDB returns an error.
+                    autoLoadBlocked=true;
                     status.setText("Não foi possível carregar: "+failure);
                     retry.setVisibility(View.VISIBLE);
                     retry.setText("Tentar novamente");
-                    retry.setOnClickListener(v->loadPage());
+                    retry.setOnClickListener(v->retryPage());
                     return;
                 }
                 int before=items.size();
@@ -536,7 +546,8 @@ abstract class MediaCatalogActivity extends Activity {
     @Override protected void onResume(){
         super.onResume();
         // A TMDB key entered in Settings should work without reopening Movies.
-        if(!loading&&items.isEmpty()&&Recs.key()!=null&&!Recs.key().isEmpty()){
+        if(!loading&&items.isEmpty()&&!autoLoadBlocked
+            &&Recs.key()!=null&&!Recs.key().isEmpty()){
             hasMore=true;loadPage();
         }
     }
