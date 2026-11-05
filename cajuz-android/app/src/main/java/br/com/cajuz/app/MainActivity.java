@@ -38,6 +38,9 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import java.io.InputStream;
+import java.io.ByteArrayOutputStream;
+import java.nio.charset.StandardCharsets;
 
 public final class MainActivity extends Activity {
   private static final int FILE_PICKER = 9124;
@@ -48,6 +51,7 @@ public final class MainActivity extends Activity {
   private ValueCallback<Uri[]> files;
   private String startUrl = "";
   private String host = "";
+  private String swipeScript;
   private static final String LOCK_PREF = "lock_enabled";
   private CajuzGuard guard;
   private FrameLayout appFrame;
@@ -177,6 +181,7 @@ public final class MainActivity extends Activity {
       @Override public void onReceivedSslError(WebView v,SslErrorHandler handler,SslError error){ handler.cancel();Toast.makeText(MainActivity.this,"Certificado HTTPS inválido.",Toast.LENGTH_LONG).show(); }
       @Override public void onPageStarted(WebView view,String url,android.graphics.Bitmap favicon){hideOffline();}
       @Override public void onPageCommitVisible(WebView view,String url){hideOffline();}
+      @Override public void onPageFinished(WebView view,String url){installSwipeMenu(view,url);}
       @Override public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError error){
         if(r.isForMainFrame())showOffline();
       }
@@ -315,6 +320,26 @@ public final class MainActivity extends Activity {
   private void hideOffline(){
     if(offlineView!=null&&webFrame!=null)webFrame.removeView(offlineView);
     offlineView=null;
+  }
+
+  /** Inject into trusted Cajuz pages only; never into third-party URLs. */
+  private void installSwipeMenu(WebView view,String pageUrl){
+    if(view==null||pageUrl==null)return;
+    Uri u=Uri.parse(pageUrl);
+    if(!"https".equalsIgnoreCase(u.getScheme())||u.getHost()==null||!host.equalsIgnoreCase(u.getHost()))return;
+    try {
+      if(swipeScript==null) {
+        try(InputStream stream=getAssets().open("cajuz-swipe.js");
+            ByteArrayOutputStream bytes=new ByteArrayOutputStream()) {
+          byte[] buffer=new byte[4096];int n;
+          while((n=stream.read(buffer))!=-1)bytes.write(buffer,0,n);
+          swipeScript=new String(bytes.toByteArray(),StandardCharsets.UTF_8);
+        }
+      }
+      view.evaluateJavascript(swipeScript,null);
+    } catch(Exception exception) {
+      android.util.Log.w("Cajuz", "Swipe menu could not be initialized",exception);
+    }
   }
 
   private void external(String url){
