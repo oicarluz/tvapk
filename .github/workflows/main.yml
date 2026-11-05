@@ -1,1 +1,28 @@
+name: Integridade do codigo Free My TV
 
+on:
+  push:
+    paths:
+      - 'personalizar.py'
+      - 'tests/**'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checar sintaxe e identidade do aplicativo
+        run: |
+          set -euo pipefail
+          python3 -m py_compile personalizar.py
+          if [ -f tests/phase10_identity.py ]; then
+            python3 tests/phase10_identity.py
+          fi
+          if [ -f tests/phase10_release_guard.py ] && [ -f .github/workflows/release-definitivo.yml ]; then
+            python3 tests/phase10_release_guard.py
+          fi
