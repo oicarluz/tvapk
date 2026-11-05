@@ -1,11 +1,12 @@
-name: Compilar Free My TV (fase 5)
+name: Compilar Free My TV (fase 6)
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5', 'feature/stability-settings-phase-6']
     paths:
       - personalizar.py
       - extensions/**
+      - tests/**
       - .github/workflows/gerar-apk.yml
 jobs:
   apk:
@@ -40,6 +41,8 @@ jobs:
         run: git clone --depth 1 --branch v1.3.0 https://github.com/simbasjungles/free-my-tv.git projeto
       - name: Aplicar personalizacao
         run: python3 personalizar.py projeto
+      - name: Verificar integrações, privilégios e persistência
+        run: python3 tests/phase6_smoke.py projeto
       - name: Compilar sem chave TMDB embutida
         run: |
           cd projeto
@@ -59,13 +62,14 @@ jobs:
           grep -q 'DiscoverActivity' /tmp/manifest.txt
           grep -q 'MoviesActivity' /tmp/manifest.txt
           grep -q 'SeriesActivity' /tmp/manifest.txt
+          grep -q 'HomeFavoritesActivity' /tmp/manifest.txt
           grep -q 'EpgActivity' /tmp/manifest.txt
           grep -q 'HomeActivity' /tmp/manifest.txt
           grep -q 'io.freemytv' /tmp/manifest.txt
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
           grep -q 'android.intent.category.HOME' /tmp/manifest.txt
           grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
-          grep -q 'io.freemytv.homep5test' /tmp/manifest.txt
+          grep -q 'io.freemytv.homep6test' /tmp/manifest.txt
           "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
           test -s projeto/app/src/io/freemytv/HomeChannelPins.java
           test -s projeto/app/src/io/freemytv/HomeImageCache.java
@@ -74,6 +78,8 @@ jobs:
           test -s projeto/app/src/io/freemytv/MoviesActivity.java
           test -s projeto/app/src/io/freemytv/SeriesActivity.java
           test -s projeto/app/src/io/freemytv/MediaCatalogActivity.java
+          test -s projeto/app/src/io/freemytv/HomeFavoritesActivity.java
+          test -s projeto/app/src/io/freemytv/HomeFavoritesTransfer.java
           grep -q 'MAX_PINNED = 30' projeto/app/src/io/freemytv/HomeChannelPins.java
           grep -q 'TvRemotePress.bind' projeto/app/src/io/freemytv/EpgActivity.java
           test -s projeto/app/src/io/freemytv/TvRemotePress.java
@@ -100,11 +106,13 @@ jobs:
           grep -q '"/search/"+media' projeto/app/src/io/freemytv/MediaCatalogActivity.java
           grep -q 'TV_GENRE_IDS' projeto/app/src/io/freemytv/MediaCatalogActivity.java
           grep -q 'PendingUniSearch.remember(this,item.title)' projeto/app/src/io/freemytv/MediaCatalogActivity.java
-          echo "OK: HOME real com guia, Filmes e Séries com géneros próprios, paginação e clipboard."
+          grep -q 'epgRequestId' projeto/app/src/io/freemytv/HomeDashboardView.java
+          grep -q 'HomeFavoritesTransfer.export(this)' projeto/app/src/io/freemytv/HomeFavoritesActivity.java
+          echo "OK: HOME real, favoritos organizáveis, importação manual e race EPG corrigida."
       - name: Publicar APK de homologacao (sem chave privada)
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-home-phase5-series-test
+          name: freemytv-home-phase6-favorites-stability-test
           path: |
             projeto/FreeMyTV.apk
           if-no-files-found: error
