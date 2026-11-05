@@ -58,7 +58,10 @@ final class HomeDashboardView extends LinearLayout {
     private ImageView bannerImage;
     private TextView bannerTitle, bannerSummary, bannerCategory, channelSubtitle;
     private boolean alive=true, active, showingApps;
-    private int generation, featureIndex;
+    private int generation, featureIndex, epgRequestId;
+    private long lastHeroAttempt, lastEpgAt;
+    private String lastEpgPins="";
+    private boolean epgLoading;
     private Map<String,HomeEpgSnapshot.Guide> epg;
     private String featureImageUrl="";
     private static final class Feature {
@@ -265,7 +268,12 @@ final class HomeDashboardView extends LinearLayout {
 
     private void loadHero(){
         if(Recs.key()==null||Recs.key().isEmpty())return;
-        int ticket=++generation;
+        // Do not change the shared lifecycle generation here: doing so used to
+        // invalidate a simultaneous EPG fetch every time Home resumed.
+        long now=System.currentTimeMillis();
+        if(lastHeroAttempt!=0&&now-lastHeroAttempt<5L*60_000)return;
+        lastHeroAttempt=now;
+        int ticket=generation;
         io.execute(()->{
             ArrayList<Feature> found=new ArrayList<>();
             try{
@@ -347,7 +355,7 @@ final class HomeDashboardView extends LinearLayout {
         return scroller;
     }
     private void buildChannels(){
-        section("Agora na TV · canais fixados","Ver todos",()->open(EpgActivity.class));
+        section("Agora na TV · canais fixados","Organizar",()->open(HomeFavoritesActivity.class));
         channelSubtitle=text("Segure OK em um canal na aba Agora na TV para fixá-lo aqui (até 30).",12,false);
         channelSubtitle.setTextColor(MUTED);
         contents.addView(channelSubtitle);
@@ -426,20 +434,40 @@ final class HomeDashboardView extends LinearLayout {
     }
     private void loadEpg(){
         List<HomeChannelPins.Channel> pinned=HomeChannelPins.list(activity);
-        if(pinned.isEmpty())return;
-        int ticket=generation;
+        if(pinned.isEmpty()){
+            epg=null;
+            lastEpgPins="";
+            lastEpgAt=0;
+            return;
+        }
+        StringBuilder fingerprint=new StringBuilder();
+        for(HomeChannelPins.Channel p:pinned)fingerprint.append(p.key).append('|');
+        final String signature=fingerprint.toString();
+        final long now=System.currentTimeMillis();
+        // A return from UniTVnet should not parse multiple XML files again
+        // when neither the fixed channels nor the cache window changed.
+        if(epgLoading)return;
+        if(epg!=null&&signature.equals(lastEpgPins)&&lastEpgAt>0
+            &&now-lastEpgAt>=0&&now-lastEpgAt<5L*60_000)return;
+        epgLoading=true;
+        final int ticket=++epgRequestId;
+        final int lifecycle=generation;
         io.execute(()->{
             Map<String,HomeEpgSnapshot.Guide> snapshot=HomeEpgSnapshot.load(activity,pinned);
             ui.post(()->{
-                if(!alive||!active||ticket!=generation)return;
+                if(ticket!=epgRequestId)return;
+                epgLoading=false;
+                if(!alive||!active||lifecycle!=generation)return;
                 epg=snapshot;
+                lastEpgPins=signature;
+                lastEpgAt=System.currentTimeMillis();
                 if(!showingApps)refreshChannels();
             });
         });
     }
 
     private void buildAppsShelf(){
-        section("Apps fixados","Todos",()->showApps());
+        section("Apps fixados","Organizar",()->open(HomeFavoritesActivity.class));
         appRow=new LinearLayout(activity);
         appRow.setGravity(Gravity.CENTER_VERTICAL);
         horizontal(appRow);
@@ -505,7 +533,7 @@ final class HomeDashboardView extends LinearLayout {
         showingApps=true;
         contents.removeAllViews();
         setCurrent(4);
-        section("Seus aplicativos","Ajustes",()->open(SettingsActivity.class));
+        section("Seus aplicativos","Personalizar",()->open(HomeFavoritesActivity.class));
         List<String[]> found=HomeApps.shelfCandidates(activity);
         if(found.isEmpty()){
             TextView empty=text("Nenhum aplicativo encontrado.",14,false);
@@ -551,11 +579,14 @@ final class HomeDashboardView extends LinearLayout {
     void pause(){
         active=false;
         generation++;
+        epgRequestId++;
+        epgLoading=false;
     }
     void destroy(){
         alive=false;
         active=false;
         generation++;
+        epgRequestId++;
         io.shutdownNow();
     }
     boolean onKey(KeyEvent event){
