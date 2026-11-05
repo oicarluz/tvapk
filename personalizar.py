@@ -181,6 +181,57 @@ def main() -> None:
         }
         if (RemoteKeys.onKey(this, event)) return true;''',
         'atalho Descobrir')
+    # Phase 2: HomeActivity stays the real Android HOME receiver. It now
+    # renders the new native dashboard; the original HomeView is kept as a
+    # fallback if the new view fails to initialize.
+    home_source = once(home_source,
+        '    private HomeView home;',
+        '''    private HomeView home;
+    private HomeDashboardView dashboard;''',
+        'dashboard field')
+    home_source = once(home_source,
+        '''        home = new HomeView(this);
+        setContentView(home);
+        getWindow().setBackgroundDrawable(null);
+        if (getIntent().getBooleanExtra(EXTRA_ALL_APPS, false)) home.showAllApps();''',
+        '''        try {
+            dashboard = new HomeDashboardView(this);
+            setContentView(dashboard);
+            getWindow().setBackgroundDrawable(null);
+            if (getIntent().getBooleanExtra(EXTRA_ALL_APPS, false)) dashboard.reset(true);
+        } catch (RuntimeException layoutError) {
+            dashboard = null;
+            home = new HomeView(this);
+            setContentView(home);
+            getWindow().setBackgroundDrawable(null);
+            if (getIntent().getBooleanExtra(EXTRA_ALL_APPS, false)) home.showAllApps();
+        }''',
+        'dashboard onCreate')
+    home_source = once(home_source,
+        '        if (home != null) home.resume();',
+        '        if (dashboard != null) dashboard.resume();\n        if (home != null) home.resume();',
+        'dashboard onResume')
+    home_source = once(home_source,
+        '        if (home != null) home.pause();',
+        '        if (dashboard != null) dashboard.pause();\n        if (home != null) home.pause();',
+        'dashboard onPause')
+    home_source = once(home_source,
+        '        if (home == null) return;',
+        '''        if (dashboard != null) {
+            dashboard.reset(intent.getBooleanExtra(EXTRA_ALL_APPS, false));
+            return;
+        }
+        if (home == null) return;''',
+        'dashboard onNewIntent')
+    home_source = once(home_source,
+        '        if (home != null) home.destroy();',
+        '        if (dashboard != null) dashboard.destroy();\n        if (home != null) home.destroy();',
+        'dashboard onDestroy')
+    home_source = once(home_source,
+        '        if (home != null && home.onKey(event)) return true;',
+        '''        if (dashboard != null && dashboard.onKey(event)) return true;
+        if (home != null && home.onKey(event)) return true;''',
+        'dashboard onKey')
     changes[home_activity] = home_source
     # Preserve the original glass Home UI. Press DOWN from its open drawer
     # to see the channel guide, without replacing or redrawing the home itself.
@@ -200,11 +251,24 @@ def main() -> None:
     for path, source in changes.items():
         path.write_text(source, encoding="utf-8")
     ext = Path(__file__).resolve().parent / 'extensions'
-    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java', 'HomeChannelPins.java', 'HomeImageCache.java'):
+    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java', 'HomeChannelPins.java', 'HomeImageCache.java', 'HomeEpgSnapshot.java', 'HomeDashboardView.java'):
         path = ext / name
         if not path.is_file():
             raise RuntimeError(f'Extensao ausente: {path}')
         (root / 'app/src/io/freemytv' / name).write_text(path.read_text(encoding='utf-8'), encoding='utf-8')
+    # Start the interim catalog pre-filtered by movie or TV series.
+    discover_file = root / 'app/src/io/freemytv/DiscoverActivity.java'
+    discover_text = discover_file.read_text(encoding='utf-8')
+    discover_text = once(discover_text,
+        '        showTabs();load();',
+        '''        int initialKind = getIntent().getIntExtra("initial_kind", 0);
+        if (initialKind == 1 || initialKind == 2) {
+            filter.kind = initialKind;
+            tab = 1;
+        }
+        showTabs();load();''',
+        'selecionar filmes ou series na Descobrir')
+    discover_file.write_text(discover_text, encoding='utf-8')
     pending.write_text(PENDING_JAVA, encoding="utf-8")
     # External EPG is an internal activity only; Discover stays the TV entry point.
     manifest_text_epg = manifest.read_text(encoding="utf-8")
@@ -226,12 +290,12 @@ def main() -> None:
     # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
     # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.homep1test'
+    test_package = 'io.freemytv.homep2test'
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = once(manifest_text, 'package="io.freemytv"',
         'package="' + test_package + '"', 'applicationId do launcher')
     manifest_text = once(manifest_text, 'android:versionName="1.3"',
-        'android:versionName="2.5-home-phase1"', 'versao')
+        'android:versionName="2.6-home-phase2"', 'versao')
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Code remains in the io.freemytv Java namespace. Explicit components
@@ -278,7 +342,7 @@ def main() -> None:
     if 'android:name="io.freemytv.EpgActivity"' not in manifest_text:
         raise RuntimeError("EpgActivity nao registrada")
     manifest_text = manifest_text.replace('android:label="Free My TV"',
-        'android:label="Free My TV Fase 1 (Teste)"')
+        'android:label="Free My TV Fase 2 (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
 
     # HomeMode issues ADB operations against PACKAGE/CLASS components.
@@ -314,7 +378,7 @@ def main() -> None:
     print('REAL HOME LAUNCHER: ' + test_package
           + ' with HOME/DEFAULT + LEANBACK/LAUNCHER on HomeActivity.')
     print('Settings opens from Home gear. Discover and EPG are internal.')
-    print('Phase 1: original launcher retained, 30 persistent pins, image cache; no accessibility changes.')
+    print('Phase 2: native Home dashboard with TMDB banner, pinned TV and apps; classic fallback kept.')
 
 if __name__ == "__main__":
     main()
