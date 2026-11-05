@@ -58,10 +58,10 @@ final class HomeDashboardView extends LinearLayout {
     private ImageView bannerImage;
     private TextView bannerTitle, bannerSummary, bannerCategory, channelSubtitle;
     private boolean alive=true, active, showingApps;
-    private int generation, featureIndex, epgRequestId;
+    private int generation, featureIndex, epgRequestId, heroRequestId;
     private long lastHeroAttempt, lastEpgAt;
     private String lastEpgPins="";
-    private boolean epgLoading;
+    private boolean epgLoading, heroLoading;
     private Map<String,HomeEpgSnapshot.Guide> epg;
     private String featureImageUrl="";
     private static final class Feature {
@@ -268,12 +268,16 @@ final class HomeDashboardView extends LinearLayout {
 
     private void loadHero(){
         if(Recs.key()==null||Recs.key().isEmpty())return;
-        // Do not change the shared lifecycle generation here: doing so used to
-        // invalidate a simultaneous EPG fetch every time Home resumed.
+        // A separate request ID prevents an obsolete response from updating
+        // a resumed Home, and a cancelled fetch no longer suppresses retry.
         long now=System.currentTimeMillis();
-        if(lastHeroAttempt!=0&&now-lastHeroAttempt<5L*60_000)return;
+        if(heroLoading)return;
+        if(lastHeroAttempt!=0&&now-lastHeroAttempt>=0
+            &&now-lastHeroAttempt<5L*60_000)return;
         lastHeroAttempt=now;
-        int ticket=generation;
+        heroLoading=true;
+        final int ticket=++heroRequestId;
+        final int lifecycle=generation;
         io.execute(()->{
             ArrayList<Feature> found=new ArrayList<>();
             try{
@@ -292,7 +296,14 @@ final class HomeDashboardView extends LinearLayout {
                 }
             }catch(Exception ignored){}
             ui.post(()->{
-                if(!alive||!active||ticket!=generation||found.isEmpty())return;
+                if(ticket!=heroRequestId)return;
+                heroLoading=false;
+                if(!alive||!active||lifecycle!=generation){
+                    // Interrupted by leaving the launcher: retry on return.
+                    lastHeroAttempt=0;
+                    return;
+                }
+                if(found.isEmpty())return;
                 features.clear();features.addAll(found);
                 featureIndex=0;renderFeature();
             });
@@ -581,12 +592,17 @@ final class HomeDashboardView extends LinearLayout {
         generation++;
         epgRequestId++;
         epgLoading=false;
+        if(heroLoading)lastHeroAttempt=0;
+        heroRequestId++;
+        heroLoading=false;
     }
     void destroy(){
         alive=false;
         active=false;
         generation++;
         epgRequestId++;
+        heroRequestId++;
+        heroLoading=false;
         io.shutdownNow();
     }
     boolean onKey(KeyEvent event){
