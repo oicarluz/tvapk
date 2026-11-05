@@ -21,9 +21,12 @@ def require(source: str, needle: str, desc: str) -> None:
     assert needle in source, f"{desc}: missing '{needle}'"
 
 def main() -> None:
-    assert manifest.attrib["package"] == "io.freemytv.homep7test"
-    assert manifest.attrib[ANDROID + "versionCode"] == "7"
-    assert manifest.attrib[ANDROID + "versionName"] == "3.1-rc-phase7"
+    expected_package=sys.argv[2] if len(sys.argv)>2 else "io.freemytv.homep7test"
+    expected_code=sys.argv[3] if len(sys.argv)>3 else "7"
+    expected_name=sys.argv[4] if len(sys.argv)>4 else "3.1-rc-phase7"
+    assert manifest.attrib["package"] == expected_package
+    assert manifest.attrib[ANDROID + "versionCode"] == expected_code
+    assert manifest.attrib[ANDROID + "versionName"] == expected_name
 
     home = read("HomeActivity.java")
     require(home, "fallbackToClassic(RuntimeException cause)", "classic fallback helper")
