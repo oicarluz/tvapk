@@ -3,9 +3,13 @@
 # Never changes the device's HOME role or disables a package.
 set -euo pipefail
 
-PKG="io.freemytv.homep9test"
+PKG="${3:-io.freemytv.homep9test}"
 APK="$1"
 REPORT="$2"
+case "$PKG" in
+  io.freemytv.homep9test|io.freemytv.homep10test|io.freemytv.tvlauncher) ;;
+  *) echo "Unexpected package: $PKG" >&2; exit 2 ;;
+esac
 mkdir -p "$REPORT"
 
 adb wait-for-device
@@ -47,7 +51,7 @@ sleep 2
 
 adb logcat -d -v time -s AndroidRuntime:E FreeMyTV:E > "$REPORT/crashes.txt"
 if grep -A 32 'FATAL EXCEPTION' "$REPORT/crashes.txt" |
-  grep -E "Process: io.freemytv.homep9test(:home)?[, ]" >/dev/null; then
+  grep -F -e "Process: $PKG," -e "Process: $PKG:home," >/dev/null; then
   echo "ERROR: Free My TV fatal exception detected." >&2
   cat "$REPORT/crashes.txt"
   exit 1
