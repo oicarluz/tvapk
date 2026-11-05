@@ -22,9 +22,12 @@ def require(source: str, markers: list[str], where: str) -> None:
 
 def main() -> None:
     manifest=ET.parse(root/"app/AndroidManifest.xml").getroot()
-    assert manifest.attrib["package"]=="io.freemytv.homep8test"
-    assert manifest.attrib[android+"versionCode"]=="8"
-    assert manifest.attrib[android+"versionName"]=="3.2-epg-phase8"
+    package=sys.argv[2] if len(sys.argv)>2 else "io.freemytv.homep8test"
+    code=sys.argv[3] if len(sys.argv)>3 else "8"
+    version=sys.argv[4] if len(sys.argv)>4 else "3.2-epg-phase8"
+    assert manifest.attrib["package"]==package
+    assert manifest.attrib[android+"versionCode"]==code
+    assert manifest.attrib[android+"versionName"]==version
 
     cache=read("EpgFeedCache.java")
     require(cache, [
