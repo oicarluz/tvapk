@@ -60,7 +60,8 @@ public final class EpgActivity extends Activity {
     private LinearLayout list, tabs;
     private ScrollView scroll;
     private TextView status;
-    private String category="Todos", focusedKey=null;
+    private String category="Todos", focusedKey=null, focusOverrideKey=null;
+    private boolean focusCategoryAfterRender=false;
     private boolean alive=true;
     private int visibleLimit=64;
     private static final int PAGE=64;
@@ -411,6 +412,10 @@ public final class EpgActivity extends Activity {
     }
 
     private void togglePin(Channel c){
+        List<HomeChannelPins.Channel> before=HomeChannelPins.list(this);
+        int previousIndex=0;
+        for(int i=0;i<before.size();i++)
+            if(before.get(i).key.equals(c.key)){previousIndex=i;break;}
         HomeChannelPins.Result result=HomeChannelPins.toggle(this,c.key,c.name,logoUrl(c));
         String msg;
         switch(result){
@@ -422,6 +427,11 @@ public final class EpgActivity extends Activity {
         Toast.makeText(this,msg,Toast.LENGTH_SHORT).show();
         if(result==HomeChannelPins.Result.PINNED||result==HomeChannelPins.Result.UNPINNED){
             focusedKey=c.key;
+            if(result==HomeChannelPins.Result.UNPINNED&&"Fixados".equals(category)){
+                List<HomeChannelPins.Channel> remaining=HomeChannelPins.list(this);
+                if(remaining.isEmpty())focusCategoryAfterRender=true;
+                else focusOverrideKey=remaining.get(Math.min(previousIndex,remaining.size()-1)).key;
+            }
             render();
         }
     }
@@ -432,7 +442,9 @@ public final class EpgActivity extends Activity {
         // Keep the focused channel and scroll position when each source finishes.
         // A "Carregar mais" action has its own focus transition.
         final boolean restoreFocus=previous!=null&&previous.getTag() instanceof String;
-        final String restoreKey=restoreFocus?(String)previous.getTag():null;
+        final String restoreKey=focusOverrideKey!=null
+            ?focusOverrideKey:(restoreFocus?(String)previous.getTag():null);
+        focusOverrideKey=null;
         final int previousScroll=scroll==null?0:scroll.getScrollY();
         final int generation=++viewGeneration;
         list.removeAllViews();
@@ -458,6 +470,11 @@ public final class EpgActivity extends Activity {
         }
         updateStatus();
         if(channels.isEmpty()){
+            if(focusCategoryAfterRender&&tabs!=null&&tabs.getChildCount()>0){
+                focusCategoryAfterRender=false;
+                final View filter=tabs.getChildAt(tabs.getChildCount()-1);
+                filter.post(filter::requestFocus);
+            }
             TextView message=text("Nenhum canal nesta categoria. O EPG externo pode não oferecer programação para todos os canais.",14,false);
             message.setTextColor(MUTED);
             message.setPadding(dp(16),dp(18),dp(12),dp(18));
