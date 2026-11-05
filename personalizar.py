@@ -365,7 +365,7 @@ def main() -> None:
     if 'android:name="io.freemytv.EpgActivity"' not in manifest_text:
         raise RuntimeError("EpgActivity nao registrada")
     manifest_text = manifest_text.replace('android:label="Free My TV"',
-        'android:label="Free My TV + Canais (Teste)"')
+        'android:label="Free My TV + UniTVnet (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
 
     # HomeMode issues ADB operations against PACKAGE/CLASS components.
