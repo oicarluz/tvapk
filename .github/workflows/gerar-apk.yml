@@ -186,6 +186,8 @@ jobs:
           api-level: 33
           target: android-tv
           arch: x86
+          profile: tv_1080p
+          ram-size: 2048M
           disable-animations: true
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -camera-back none
           script: bash tests/android_tv_emulator_smoke.sh pacote-fase9/FreeMyTV-Fase-9.apk
