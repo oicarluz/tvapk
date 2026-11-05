@@ -187,7 +187,19 @@ def main() -> None:
     home_source = once(home_source,
         '    private HomeView home;',
         '''    private HomeView home;
-    private HomeDashboardView dashboard;''',
+    private HomeDashboardView dashboard;
+
+    /** Keep a working launcher even if the custom Home dashboard throws. */
+    private void fallbackToClassic(RuntimeException cause) {
+        android.util.Log.e("FreeMyTV", "Dashboard failed, switching to classic Home", cause);
+        if (dashboard != null) {
+            try { dashboard.destroy(); } catch (RuntimeException ignored) {}
+        }
+        dashboard = null;
+        home = new HomeView(this);
+        setContentView(home);
+        getWindow().setBackgroundDrawable(null);
+    }''',
         'dashboard field')
     home_source = once(home_source,
         '''        home = new HomeView(this);
@@ -200,16 +212,17 @@ def main() -> None:
             getWindow().setBackgroundDrawable(null);
             if (getIntent().getBooleanExtra(EXTRA_ALL_APPS, false)) dashboard.reset(true);
         } catch (RuntimeException layoutError) {
-            dashboard = null;
-            home = new HomeView(this);
-            setContentView(home);
-            getWindow().setBackgroundDrawable(null);
+            fallbackToClassic(layoutError);
             if (getIntent().getBooleanExtra(EXTRA_ALL_APPS, false)) home.showAllApps();
         }''',
         'dashboard onCreate')
     home_source = once(home_source,
         '        if (home != null) home.resume();',
-        '        if (dashboard != null) dashboard.resume();\n        if (home != null) home.resume();',
+        '''        if (dashboard != null) {
+            try { dashboard.resume(); }
+            catch (RuntimeException error) { fallbackToClassic(error); }
+        }
+        if (home != null) home.resume();''',
         'dashboard onResume')
     home_source = once(home_source,
         '        if (home != null) home.pause();',
@@ -218,8 +231,12 @@ def main() -> None:
     home_source = once(home_source,
         '        if (home == null) return;',
         '''        if (dashboard != null) {
-            dashboard.reset(intent.getBooleanExtra(EXTRA_ALL_APPS, false));
-            return;
+            try {
+                dashboard.reset(intent.getBooleanExtra(EXTRA_ALL_APPS, false));
+                return;
+            } catch (RuntimeException error) {
+                fallbackToClassic(error);
+            }
         }
         if (home == null) return;''',
         'dashboard onNewIntent')
@@ -319,12 +336,14 @@ def main() -> None:
     # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
     # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.homep6test'
+    test_package = 'io.freemytv.homep7test'
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = once(manifest_text, 'package="io.freemytv"',
         'package="' + test_package + '"', 'applicationId do launcher')
     manifest_text = once(manifest_text, 'android:versionName="1.3"',
-        'android:versionName="3.0-stability-phase6"', 'versao')
+        'android:versionName="3.1-rc-phase7"', 'versao')
+    manifest_text = once(manifest_text, 'android:versionCode="4"',
+        'android:versionCode="7"', 'versionCode do APK de homologacao')
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Code remains in the io.freemytv Java namespace. Explicit components
@@ -371,7 +390,7 @@ def main() -> None:
     if 'android:name="io.freemytv.EpgActivity"' not in manifest_text:
         raise RuntimeError("EpgActivity nao registrada")
     manifest_text = manifest_text.replace('android:label="Free My TV"',
-        'android:label="Free My TV Fase 6 (Teste)"')
+        'android:label="Free My TV Fase 7 (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
 
     # HomeMode issues ADB operations against PACKAGE/CLASS components.
@@ -407,7 +426,7 @@ def main() -> None:
     print('REAL HOME LAUNCHER: ' + test_package
           + ' with HOME/DEFAULT + LEANBACK/LAUNCHER on HomeActivity.')
     print('Settings opens from Home gear. Discover and EPG are internal.')
-    print('Phase 6: stable EPG/hero lifecycle, favorites reorder and explicit clipboard transfer.')
+    print('Phase 7: RC test package, protected classic fallback, diagnostic tools and CI verification.')
 
 if __name__ == "__main__":
     main()
