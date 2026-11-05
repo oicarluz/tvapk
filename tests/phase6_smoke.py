@@ -23,7 +23,8 @@ def main() -> None:
     ns = "{http://schemas.android.com/apk/res/android}"
     xml = ET.parse(root / "app/AndroidManifest.xml").getroot()
     pkg = xml.attrib["package"]
-    assert pkg == "io.freemytv.homep6test", pkg
+    expected = sys.argv[2] if len(sys.argv) > 2 else "io.freemytv.homep6test"
+    assert pkg == expected, (pkg, expected)
 
     app = xml.find("application")
     assert app is not None
@@ -68,7 +69,7 @@ def main() -> None:
                      "dashboard.destroy()",
                      "new HomeView(this)")
     mode = assert_has(src / "HomeMode.java",
-                      'static final String PKG = "io.freemytv.homep6test";')
+                      'static final String PKG = "' + expected + '";')
     pins = assert_has(src / "HomeChannelPins.java",
                       "MAX_PINNED = 30",
                       "static boolean replaceAll(",
@@ -82,9 +83,9 @@ def main() -> None:
                          "HomeFavoritesActivity.class",
                          "HomeApps.shelfPackages(activity)",
                          "HomeEpgSnapshot.load(activity,pinned)",
-                         "featureIndex, epgRequestId;")
+                         "featureIndex, epgRequestId, heroRequestId;")
     assert "int ticket=++generation;" not in home_ui[home_ui.index("private void loadHero()"):home_ui.index("private void loadBackdrop(")]
-    assert "int ticket=generation;" in home_ui[home_ui.index("private void loadHero()"):home_ui.index("private void loadBackdrop(")]
+    assert "int ticket=++heroRequestId;" in home_ui[home_ui.index("private void loadHero()"):home_ui.index("private void loadBackdrop(")]
     assert "epgRequestId++;" in home_ui
 
     guide = assert_has(src / "EpgActivity.java",
