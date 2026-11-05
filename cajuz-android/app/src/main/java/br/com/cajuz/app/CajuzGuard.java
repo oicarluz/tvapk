@@ -50,7 +50,7 @@ final class CajuzGuard {
           }
           @Override public void onAuthenticationError(int error,CharSequence message){
             if(switchingToPin)return;
-            if(error==BiometricPrompt.BIOMETRIC_ERROR_NEGATIVE_BUTTON){
+            if(error==13 /* negativo, constante disponível no AndroidX */){
               switchingToPin=true;credential();return;
             }
             if(error==BiometricPrompt.BIOMETRIC_ERROR_USER_CANCELED ||
