@@ -147,6 +147,24 @@ final class HomeChannelPins {
         }
     }
 
+    /**
+     * Explicit bulk restore for user-approved backups only.
+     * Unlike ordinary pinning, does not silently discard excess/duplicate items.
+     */
+    static boolean replaceAll(Context context, List<Channel> replacement) {
+        if (replacement == null || replacement.size() > MAX_PINNED) return false;
+        ArrayList<Channel> validated = new ArrayList<>();
+        for (Channel item : replacement) {
+            if (item == null || item.key == null || item.name == null) return false;
+            Channel cleaned = channel(item.key, item.name, item.logo);
+            if (cleaned == null || indexOf(validated, cleaned.key) >= 0) return false;
+            validated.add(cleaned);
+        }
+        synchronized (LOCK) {
+            return persist(prefs(context), validated);
+        }
+    }
+
     private static int indexOf(List<Channel> channels, String key) {
         for (int i = 0; i < channels.size(); i++) {
             if (channels.get(i).key.equals(key)) return i;
