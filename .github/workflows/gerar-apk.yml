@@ -9,7 +9,6 @@ on:
       - tests/**
       - tools/**
       - docs/FASE-10-RELEASE.md
-      - docs/FASE-10-RELEASE.md
       - .github/workflows/gerar-apk.yml
 jobs:
   apk:
@@ -42,6 +41,7 @@ jobs:
         run: |
           python3 -m py_compile personalizar.py
           python3 tests/phase10_identity.py
+          python3 tests/phase10_release_guard.py
       - name: Clonar versao oficial fixa
         run: git clone --depth 1 --branch v1.3.0 https://github.com/simbasjungles/free-my-tv.git projeto
       - name: Aplicar personalizacao
