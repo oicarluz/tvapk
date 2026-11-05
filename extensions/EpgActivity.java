@@ -49,10 +49,6 @@ import java.util.concurrent.Executors;
  * Files are read from a bounded disk cache, never fully in memory.
  */
 public final class EpgActivity extends Activity {
-    private static final String BASE="https://raw.githubusercontent.com/limaalef/BrazilTVEPG/main/";
-    private static final String[] FEEDS={"globo.xml","maissbt.xml","epg.xml","claro.xml","plutotv.xml","xsports.xml"};
-    private static final long TTL=4L*60*60*1000;
-    private static final long MAX_XML=30L*1024*1024;
     private static final int BG=0xff101421, CARD=0xff1b2334, FOCUS=0xff324b76, WHITE=0xfff4f7ff, MUTED=0xffb5c1d4;
     private static final String LOGO_BASE="https://raw.githubusercontent.com/tv-logo/tv-logos/main/countries/brazil/";
     private final ExecutorService jobs=Executors.newFixedThreadPool(3);
@@ -291,10 +287,10 @@ public final class EpgActivity extends Activity {
     }
 
     private void loadAll(){
-        for(String feed:FEEDS){
+        for(String feed:EpgFeedCache.FEEDS){
             if(!alive)return;
             try{
-                HashMap<String,Channel> result=parseFeed(cacheFile(feed));
+                HashMap<String,Channel> result=parseFeed(EpgFeedCache.get(this,feed));
                 main.post(()->{
                     if(!alive)return;
                     for(Channel c:result.values()) {
@@ -328,35 +324,6 @@ public final class EpgActivity extends Activity {
                 status.setText("Não foi possível carregar o EPG. Verifique a internet ou tente novamente.");
             }else updateStatus();
         });
-    }
-    private File cacheFile(String name) throws Exception{
-        File cache=new File(getCacheDir(),"xmltv-"+name);
-        if(cache.isFile() && cache.length()>100 && System.currentTimeMillis()-cache.lastModified()<TTL)return cache;
-        HttpURLConnection con=null;
-        File temp=new File(getCacheDir(),"xmltv-"+name+".download");
-        try{
-            con=(HttpURLConnection)new URL(BASE+name).openConnection();
-            con.setConnectTimeout(9000);con.setReadTimeout(18000);
-            con.setRequestProperty("Accept-Encoding","identity");
-            if(con.getResponseCode()!=200)throw new Exception("EPG HTTP "+con.getResponseCode());
-            long length=0;
-            try(InputStream in=con.getInputStream();FileOutputStream out=new FileOutputStream(temp)){
-                byte[] block=new byte[16384];int n;
-                while((n=in.read(block))!=-1){
-                    length+=n;
-                    if(length>MAX_XML)throw new Exception("EPG excedeu limite de segurança");
-                    out.write(block,0,n);
-                }
-            }
-            if(length<100)throw new Exception("Guia EPG vazio");
-            if(cache.exists()&&!cache.delete())throw new Exception("Falha ao atualizar cache");
-            if(!temp.renameTo(cache))throw new Exception("Falha ao salvar cache EPG");
-            return cache;
-        }catch(Exception err){
-            temp.delete();
-            if(cache.isFile()&&cache.length()>100)return cache;
-            throw err;
-        }finally{if(con!=null)con.disconnect();}
     }
     private HashMap<String,Channel> parseFeed(File file) throws Exception{
         HashMap<String,Channel> byId=new HashMap<>();
@@ -392,7 +359,7 @@ public final class EpgActivity extends Activity {
                     String tag=p.getName();
                     if("channel".equals(tag)&&ch!=null){
                         if(ch.name!=null&&ch.id!=null&&!ch.name.isEmpty()){
-                            ch.key=normalize(ch.name);
+                            ch.key=HomeChannelPins.canonical(ch.name);
                             ch.open=isOpen(ch.name);
                             if(!hidden(ch)) {byId.put(ch.id,ch);out.put(ch.key,ch);}
                         }
