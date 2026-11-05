@@ -109,79 +109,20 @@ def patch_remote_xml(src: str) -> str:
         'android:canRequestFilterKeyEvents="true"\n    android:canRetrieveWindowContent="true"', 'permissao de acessibilidade')
 
 PENDING_JAVA = r"""package io.freemytv;
-import android.accessibilityservice.AccessibilityService;
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Context;
-import android.os.Bundle;
-import android.os.SystemClock;
-import android.view.accessibility.AccessibilityEvent;
-import android.view.accessibility.AccessibilityNodeInfo;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.util.ArrayDeque;
 
-/** Optional, user-authorized assist for a search explicitly initiated on the home screen. */
+/** Explicit title copy to open a movie or series in UniTVnet. No accessibility. */
 final class PendingUniSearch {
-    private static final String PKG = "com.unitvnet.tvod";
-    private static final long TTL = 120000L;
-    private static long lastTry;
-    private static File pending(Context c) { return new File(c.getFilesDir(), "pending-unitvnet.txt"); }
-    static void remember(Context context, String title) {
+    static void remember(Context c, String title) {
         if (title == null || title.trim().isEmpty()) return;
-        Context c = context.getApplicationContext();
         try {
-            ClipboardManager cb = (ClipboardManager)c.getSystemService(Context.CLIPBOARD_SERVICE);
-            if (cb != null) cb.setPrimaryClip(ClipData.newPlainText("Filme", title));
-        } catch (RuntimeException ignored) {}
-        try (FileOutputStream out = new FileOutputStream(pending(c))) {
-            out.write((Long.toString(System.currentTimeMillis() + TTL) + "\n" + title).getBytes(StandardCharsets.UTF_8));
+            ClipboardManager clipboard =
+                (ClipboardManager)c.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (clipboard != null) clipboard.setPrimaryClip(
+                ClipData.newPlainText("Título para UniTVnet", title));
         } catch (Exception ignored) {}
-    }
-    private static String read(Context c) {
-        try {
-            File f = pending(c);
-            if (!f.exists() || f.length() > 4096) return null;
-            String s = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
-            int k = s.indexOf('\n');
-            if (k < 0) return null;
-            if (System.currentTimeMillis() > Long.parseLong(s.substring(0, k))) { f.delete(); return null; }
-            return s.substring(k + 1);
-        } catch (Exception ignored) { return null; }
-    }
-    static void tryFill(AccessibilityService service, AccessibilityEvent event) {
-        if (event == null || event.getPackageName() == null || !PKG.contentEquals(event.getPackageName())) return;
-        int type = event.getEventType();
-        if (type != AccessibilityEvent.TYPE_VIEW_FOCUSED
-            && type != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED
-            && type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
-        long now = SystemClock.elapsedRealtime();
-        if (now - lastTry < 300) return;
-        lastTry = now;
-        String title = read(service);
-        if (title == null || title.isEmpty()) return;
-        AccessibilityNodeInfo root = service.getRootInActiveWindow();
-        if (root == null) return;
-        ArrayDeque<AccessibilityNodeInfo> queue = new ArrayDeque<>();
-        queue.add(root);
-        int visited = 0;
-        while (!queue.isEmpty() && visited++ < 120) {
-            AccessibilityNodeInfo node = queue.removeFirst();
-            if (node.isEditable() && node.isFocused() && !node.isPassword()) {
-                Bundle b = new Bundle();
-                b.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, title);
-                if (node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, b)) {
-                    pending(service).delete();
-                    return;
-                }
-            }
-            for (int i = 0; i < node.getChildCount(); i++) {
-                AccessibilityNodeInfo child = node.getChild(i);
-                if (child != null) queue.add(child);
-            }
-        }
     }
 }
 """
@@ -208,8 +149,7 @@ def main() -> None:
         manifest: patch_manifest(originals[manifest]),
         recs: patch_recs(originals[recs]),
         home: patch_home(originals[home]),
-        remote: patch_remote(originals[remote]),
-        cfg: patch_remote_xml(originals[cfg]),
+        # Do not modify the original accessibility service or remote buttons.
     }
     # Discovery v2 is a separate activity, leaving the existing HOME handler unchanged.
     discovery_manifest = '''        <activity
@@ -260,7 +200,7 @@ def main() -> None:
     for path, source in changes.items():
         path.write_text(source, encoding="utf-8")
     ext = Path(__file__).resolve().parent / 'extensions'
-    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java'):
+    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java', 'HomeChannelPins.java', 'HomeImageCache.java'):
         path = ext / name
         if not path.is_file():
             raise RuntimeError(f'Extensao ausente: {path}')
@@ -286,12 +226,12 @@ def main() -> None:
     # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
     # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.launchertvtest'
+    test_package = 'io.freemytv.homep1test'
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = once(manifest_text, 'package="io.freemytv"',
         'package="' + test_package + '"', 'applicationId do launcher')
     manifest_text = once(manifest_text, 'android:versionName="1.3"',
-        'android:versionName="2.2-launcher-epg"', 'versao')
+        'android:versionName="2.5-home-phase1"', 'versao')
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Code remains in the io.freemytv Java namespace. Explicit components
@@ -338,7 +278,7 @@ def main() -> None:
     if 'android:name="io.freemytv.EpgActivity"' not in manifest_text:
         raise RuntimeError("EpgActivity nao registrada")
     manifest_text = manifest_text.replace('android:label="Free My TV"',
-        'android:label="Free My TV + EPG (Teste)"')
+        'android:label="Free My TV Fase 1 (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
 
     # HomeMode issues ADB operations against PACKAGE/CLASS components.
@@ -374,7 +314,7 @@ def main() -> None:
     print('REAL HOME LAUNCHER: ' + test_package
           + ' with HOME/DEFAULT + LEANBACK/LAUNCHER on HomeActivity.')
     print('Settings opens from Home gear. Discover and EPG are internal.')
-    print('Safe parallel install: no auto-switch at installation.')
+    print('Phase 1: original launcher retained, 30 persistent pins, image cache; no accessibility changes.')
 
 if __name__ == "__main__":
     main()
