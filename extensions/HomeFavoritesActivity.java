@@ -139,6 +139,7 @@ public final class HomeFavoritesActivity extends Activity {
     }
     private void render(String wantedFocus){
         if(rows==null)return;
+        final int previousScroll=scroller==null?0:scroller.getScrollY();
         focusTargets.clear();
         rows.removeAllViews();
         List<HomeChannelPins.Channel> channels=HomeChannelPins.list(this);
@@ -221,6 +222,7 @@ public final class HomeFavoritesActivity extends Activity {
                 render(null);
             }),105);
         }
+        if(scroller!=null&&previousScroll>0)scroller.post(()->scroller.scrollTo(0,previousScroll));
         if(wantedFocus!=null){
             View focus=focusTargets.get(wantedFocus);
             if(focus!=null&&focus.isEnabled())focus.post(focus::requestFocus);
