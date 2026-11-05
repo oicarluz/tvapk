@@ -1,14 +1,15 @@
-name: Compilar Free My TV (fase 8 - EPG)
+name: Compilar Free My TV (fase 9 - QA TCL)
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5', 'feature/stability-settings-phase-6', 'feature/release-readiness-phase-7', 'feature/epg-catalog-hardening-phase-8']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5', 'feature/stability-settings-phase-6', 'feature/release-readiness-phase-7', 'feature/epg-catalog-hardening-phase-8', 'feature/tcl-homologation-phase-9']
     paths:
       - personalizar.py
       - extensions/**
       - tests/**
       - tools/**
       - docs/FASE-8-EPG-HOME.md
+      - docs/FASE-9-HOMOLOGACAO.md
       - .github/workflows/gerar-apk.yml
 jobs:
   apk:
@@ -45,9 +46,10 @@ jobs:
         run: python3 personalizar.py projeto
       - name: Verificar integrações, privilégios e persistência
         run: |
-          python3 tests/phase6_smoke.py projeto io.freemytv.homep8test
-          python3 tests/phase7_smoke.py projeto io.freemytv.homep8test 8 3.2-epg-phase8
-          python3 tests/phase8_smoke.py projeto
+          python3 tests/phase6_smoke.py projeto io.freemytv.homep9test
+          python3 tests/phase7_smoke.py projeto io.freemytv.homep9test 9 3.3-qa-phase9
+          python3 tests/phase8_smoke.py projeto io.freemytv.homep9test 9 3.3-qa-phase9
+          python3 tests/phase9_smoke.py projeto
       - name: Compilar sem chave TMDB embutida
         env:
           FREEMYTV_SIGNING_B64: ${{ secrets.FREEMYTV_KEYSTORE_BASE64 }}
@@ -90,7 +92,7 @@ jobs:
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
           grep -q 'android.intent.category.HOME' /tmp/manifest.txt
           grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
-          grep -q 'io.freemytv.homep8test' /tmp/manifest.txt
+          grep -q 'io.freemytv.homep9test' /tmp/manifest.txt
           "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
           test -s projeto/app/src/io/freemytv/HomeChannelPins.java
           test -s projeto/app/src/io/freemytv/HomeImageCache.java
@@ -136,22 +138,61 @@ jobs:
           grep -q 'for(String feed:EpgFeedCache.FEEDS)' projeto/app/src/io/freemytv/EpgActivity.java
           grep -q 'EpgFeedCache.get(context, feed)' projeto/app/src/io/freemytv/HomeEpgSnapshot.java
           grep -q 'ch.key=HomeChannelPins.canonical(ch.name)' projeto/app/src/io/freemytv/EpgActivity.java
-          echo "OK: HOME, shared EPG sources/cache, persistent pins, remote focus and catalogs."
-      - name: Preparar pacote de homologacao da Fase 8
+          grep -q 'autoLoadBlocked=true;' projeto/app/src/io/freemytv/MediaCatalogActivity.java
+          grep -q 'focusCategoryAfterRender' projeto/app/src/io/freemytv/EpgActivity.java
+          echo "OK: HOME, Guide, TMDB manual retry, pin focus and all five navigation tabs."
+      - name: Preparar pacote de homologacao da Fase 9
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p pacote-fase8
-          cp projeto/FreeMyTV.apk pacote-fase8/FreeMyTV-Fase-8.apk
-          cp tools/tcl-diagnostico.ps1 pacote-fase8/tcl-diagnostico.ps1
-          cp docs/FASE-8-EPG-HOME.md pacote-fase8/LEIA-ME-Fase-8.md
-          (cd pacote-fase8 && sha256sum FreeMyTV-Fase-8.apk > SHA256.txt)
-          test -s pacote-fase8/FreeMyTV-Fase-8.apk
-          test -s pacote-fase8/SHA256.txt
+          mkdir -p pacote-fase9
+          cp projeto/FreeMyTV.apk pacote-fase9/FreeMyTV-Fase-9.apk
+          cp tools/tcl-diagnostico.ps1 pacote-fase9/tcl-diagnostico.ps1
+          cp tools/tcl-checklist-fase9.ps1 pacote-fase9/tcl-checklist-fase9.ps1
+          cp docs/FASE-9-HOMOLOGACAO.md pacote-fase9/LEIA-ME-Fase-9.md
+          (cd pacote-fase9 && sha256sum FreeMyTV-Fase-9.apk > SHA256.txt)
+          test -s pacote-fase9/FreeMyTV-Fase-9.apk
+          test -s pacote-fase9/SHA256.txt
       - name: Publicar APK e roteiro de homologacao
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-phase8-epg-home-test
+          name: freemytv-phase9-qa-tcl-test
           path: |
-            pacote-fase8/*
+            pacote-fase9/*
           if-no-files-found: error
+
+  android_tv_emulator:
+    name: Testar navegação no emulador Android TV
+    needs: apk
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Baixar APK homologado na compilação
+        uses: actions/download-artifact@v4
+        with:
+          name: freemytv-phase9-qa-tcl-test
+          path: pacote-fase9
+      - name: Habilitar KVM no runner Linux
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulador Android TV API 33 + D-pad
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: android-tv
+          arch: x86
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -camera-back none
+          script: bash tests/android_tv_emulator_smoke.sh pacote-fase9/FreeMyTV-Fase-9.apk
+      - name: Publicar evidências do emulador mesmo se falhar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: freemytv-phase9-emulator-evidence
+          path: emulator-results/*
+          if-no-files-found: warn
