@@ -84,6 +84,8 @@ final class HomeDashboardView extends LinearLayout {
         scroll.addView(contents);
         addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         showHome(false);
+        // Android TV requires a visible initial focus for D-pad navigation.
+        post(()->{if(alive&&!navigation.isEmpty())navigation.get(0).requestFocus();});
     }
 
     private int dp(float n){return Math.round(n*getResources().getDisplayMetrics().density);}
