@@ -1,6 +1,8 @@
 package io.freemytv;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.provider.Settings;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
@@ -335,7 +337,7 @@ public final class EpgActivity extends Activity {
                 card.setBackground(shape(focus?FOCUS:CARD));
                 if(focus){focusedKey=c.key;loadImage.run();}
             });
-            card.setOnClickListener(v->openUni());
+            card.setOnClickListener(v->openUni(c.name));
             if(focusedKey!=null&&focusedKey.equals(c.key)){card.requestFocus();restored=true;}
             else if(displayed==0&&focusedKey==null){card.requestFocus();restored=true;}
             displayed++;
@@ -414,12 +416,49 @@ public final class EpgActivity extends Activity {
             }
         });
     }
-    private void openUni(){
-        Intent launch=getPackageManager().getLeanbackLaunchIntentForPackage("com.unitvnet.tvod");
-        if(launch==null)launch=getPackageManager().getLaunchIntentForPackage("com.unitvnet.tvod");
-        if(launch==null){Toast.makeText(this,"UniTVnet não encontrado. Guia apenas informativo.",Toast.LENGTH_LONG).show();return;}
-        try{startActivity(launch);}
-        catch(Exception ex){Toast.makeText(this,"Não foi possível abrir UniTVnet",Toast.LENGTH_LONG).show();}
+    private void openUni(String channel){
+        final String pkg="com.unitvnet.tvod";
+        Intent launch=getPackageManager().getLeanbackLaunchIntentForPackage(pkg);
+        if(launch==null)launch=getPackageManager().getLaunchIntentForPackage(pkg);
+        if(launch==null){
+            Toast.makeText(this,"UniTVnet não encontrado. Instale e autentique primeiro.",Toast.LENGTH_LONG).show();
+            return;
+        }
+        final Intent target=launch;
+        if(!PendingUniChannel.enabled(this)){
+            new AlertDialog.Builder(this)
+                .setTitle("Localizar "+channel+" no UniTVnet")
+                .setMessage("Para procurar o canal automaticamente, ative o serviço de acessibilidade do Free My TV nas configurações do Android TV. Ele só atuará no UniTVnet quando você selecionar um canal aqui. Se preferir, abra o UniTVnet normalmente.")
+                .setPositiveButton("Configurar acesso",(dialog,which)->{
+                    try{startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));}
+                    catch(Exception e){Toast.makeText(this,"Abra Acessibilidade nas configurações da TV.",Toast.LENGTH_LONG).show();}
+                })
+                .setNeutralButton("Abrir normalmente",(dialog,which)->launchUni(target,channel,false))
+                .setNegativeButton("Cancelar",null)
+                .show();
+            return;
+        }
+        launchUni(target,channel,true);
+    }
+
+    private void launchUni(Intent launch,String channel,boolean assisted){
+        if(assisted)PendingUniChannel.request(this,channel);
+        try{
+            startActivity(launch);
+            if(assisted)Toast.makeText(this,"Procurando "+channel+" no UniTVnet…",Toast.LENGTH_LONG).show();
+        }catch(Exception ex){
+            if(assisted)PendingUniChannel.cancel(this,"Falha ao iniciar UniTVnet.");
+            Toast.makeText(this,"Não foi possível abrir UniTVnet",Toast.LENGTH_LONG).show();
+        }
+    }
+    private String lastAssistStatus="";
+    @Override protected void onResume(){
+        super.onResume();
+        String result=PendingUniChannel.status(this);
+        if(!result.isEmpty()&&!result.equals(lastAssistStatus)){
+            lastAssistStatus=result;
+            Toast.makeText(this,result,Toast.LENGTH_LONG).show();
+        }
     }
     @Override protected void onDestroy(){
         alive=false;viewGeneration++;jobs.shutdownNow();super.onDestroy();
