@@ -2,7 +2,7 @@ name: Compilar Free My TV + UniTVnet
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg']
     paths:
       - personalizar.py
       - extensions/**
@@ -61,11 +61,15 @@ jobs:
           grep -q 'HomeActivity' /tmp/manifest.txt
           grep -q 'io.freemytv' /tmp/manifest.txt
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
-          echo "OK: APK alinhado, assinatura valida, DiscoverActivity TV e EpgActivity presentes."
+          grep -q 'android.intent.category.HOME' /tmp/manifest.txt
+          grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
+          grep -q 'io.freemytv.launchertvtest' /tmp/manifest.txt
+          "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
+          echo "OK: HomeActivity e o app icon abrem a HOME original, com categoria HOME, LEANBACK e EPG."
       - name: Publicar APK de homologacao (sem chave privada)
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-discover-v2-epg-tv-test
+          name: freemytv-home-original-epg-launcher-test
           path: |
             projeto/FreeMyTV.apk
           if-no-files-found: error
