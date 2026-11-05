@@ -278,7 +278,7 @@ def main() -> None:
         '    <string name="unitv_channel_service_description">'
         'Busca por canais no UniTVnet quando voce solicita. '
         'Nao le outras aplicacoes e nao acessa senhas.'
-        '</string>\\n</resources>', 'descricao do servico')
+        '</string>\n</resources>', 'descricao do servico')
     strings.write_text(strings_src, encoding='utf-8')
     # External EPG is an internal activity only; Discover stays the TV entry point.
     manifest_text_epg = manifest.read_text(encoding="utf-8")
