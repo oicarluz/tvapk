@@ -336,14 +336,14 @@ def main() -> None:
     # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
     # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.homep8test'
+    test_package = 'io.freemytv.homep9test'
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = once(manifest_text, 'package="io.freemytv"',
         'package="' + test_package + '"', 'applicationId do launcher')
     manifest_text = once(manifest_text, 'android:versionName="1.3"',
-        'android:versionName="3.2-epg-phase8"', 'versao')
+        'android:versionName="3.3-smoke-phase9"', 'versao')
     manifest_text = once(manifest_text, 'android:versionCode="4"',
-        'android:versionCode="8"', 'versionCode do APK de homologacao')
+        'android:versionCode="9"', 'versionCode do APK de homologacao')
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Code remains in the io.freemytv Java namespace. Explicit components
@@ -390,7 +390,7 @@ def main() -> None:
     if 'android:name="io.freemytv.EpgActivity"' not in manifest_text:
         raise RuntimeError("EpgActivity nao registrada")
     manifest_text = manifest_text.replace('android:label="Free My TV"',
-        'android:label="Free My TV Fase 8 (Teste)"')
+        'android:label="Free My TV Fase 9 (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
 
     # HomeMode issues ADB operations against PACKAGE/CLASS components.
@@ -426,7 +426,7 @@ def main() -> None:
     print('REAL HOME LAUNCHER: ' + test_package
           + ' with HOME/DEFAULT + LEANBACK/LAUNCHER on HomeActivity.')
     print('Settings opens from Home gear. Discover and EPG are internal.')
-    print('Phase 8: unified XMLTV cache, channel keys, retained TV focus, protected classic Home.')
+    print('Phase 9: emulator smoke, protected Home recovery, stable EPG/catalog integration.')
 
 if __name__ == "__main__":
     main()
