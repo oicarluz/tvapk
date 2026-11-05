@@ -9,6 +9,8 @@ PKG="io.freemytv.homep9test"
 HOME_COMPONENT="$PKG/io.freemytv.HomeActivity"
 OUT="emulator-results"
 mkdir -p "$OUT"
+# Retain crash evidence even when an intermediate assertion exits nonzero.
+trap 'adb logcat -d -v threadtime -s AndroidRuntime:E FreeMyTV:E ActivityTaskManager:W > "$OUT/logcat-errors.txt" 2>/dev/null || true; adb shell dumpsys activity activities > "$OUT/final-activities.txt" 2>/dev/null || true' EXIT
 adb wait-for-device
 adb shell wm size | tee "$OUT/display.txt"
 if ! grep -Eq 'Physical size: (1920x1080|1280x720|3840x2160)' "$OUT/display.txt"; then
@@ -39,8 +41,9 @@ assert_activity() {
   fi
 }
 open_home() {
-  adb shell am start -W -n "$HOME_COMPONENT" > "$OUT/launch-home.txt"
+  adb shell am start -W -n "$HOME_COMPONENT" >> "$OUT/launch-home.txt"
   sleep 3
+  assert_activity "HomeActivity"
 }
 key() {
   adb shell input keyevent "$1"
@@ -69,8 +72,10 @@ assert_activity "EpgActivity"
 echo "PASS: Agora na TV opens from native HOME with D-pad" | tee -a "$OUT/checks.txt"
 
 open_home
+capture returned-home
 key KEYCODE_DPAD_RIGHT
 key KEYCODE_DPAD_RIGHT
+capture movies-before-enter
 key KEYCODE_DPAD_CENTER
 sleep 3
 capture movies
