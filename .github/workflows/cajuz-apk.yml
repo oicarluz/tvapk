@@ -1,0 +1,37 @@
+name: Cajuz Android APK
+on:
+  push:
+    branches: [cajuz-apk]
+    paths:
+      - 'cajuz-android/**'
+      - '.github/workflows/cajuz-apk.yml'
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Android SDK
+        shell: bash
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "ANDROID_HOME=$ANDROID_HOME" >> "$GITHUB_ENV"
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then SDKMANAGER="$(command -v sdkmanager)"; fi
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" --install 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Build installable APK
+        run: bash cajuz-android/build.sh
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: cajuz-android-0.1.0
+          path: cajuz-android/build/output/Cajuz-Android-0.1.0.apk
+          if-no-files-found: error
