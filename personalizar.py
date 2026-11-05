@@ -6,6 +6,7 @@ No user credentials, TMDB key or installed applications are accessed here.
 Changes are source-level and must be compiled and tested on a device.
 """
 from pathlib import Path
+import os
 import re
 import sys
 
@@ -336,14 +337,37 @@ def main() -> None:
     # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
     # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.homep9test'
+    # Preview stays isolated from both the existing launcher and the eventual
+    # permanent package. Only release mode may use the final applicationId.
+    release_mode = os.environ.get('FREEMYTV_RELEASE_MODE', '') == '1'
+    if release_mode:
+        test_package = 'io.freemytv.tvlauncher'
+        version_name = os.environ.get('FREEMYTV_RELEASE_VERSION_NAME', '1.0.0')
+        version_code = os.environ.get('FREEMYTV_RELEASE_VERSION_CODE', '100')
+        label = 'Free My TV'
+        # Fail closed: never generate a "production" package with a throwaway
+        # signing certificate. GitHub Secrets are supplied by a protected job.
+        signing_path = os.environ.get('FREEMYTV_KEYSTORE', '')
+        if not signing_path or not Path(signing_path).is_file() or not os.environ.get('FREEMYTV_KEYSTORE_PASS'):
+            raise RuntimeError('Release bloqueada: keystore permanente e senha obrigatorios. Use Fase 10 Teste para homologacao.')
+        if not re.fullmatch(r'[1-9][0-9]*', version_code) or int(version_code) < 100:
+            raise RuntimeError('Release: versionCode deve ser um inteiro >= 100.')
+        if not re.fullmatch(r'[0-9]+\\.[0-9]+\\.[0-9]+', version_name):
+            raise RuntimeError('Release: versionName deve seguir X.Y.Z.')
+    else:
+        if os.environ.get('FREEMYTV_RELEASE_VERSION_NAME') or os.environ.get('FREEMYTV_RELEASE_VERSION_CODE'):
+            raise RuntimeError('Versao de release exige FREEMYTV_RELEASE_MODE=1.')
+        test_package = 'io.freemytv.homep10test'
+        version_name = '3.4-phase10-preview'
+        version_code = '10'
+        label = 'Free My TV Fase 10 (Teste)'
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = once(manifest_text, 'package="io.freemytv"',
         'package="' + test_package + '"', 'applicationId do launcher')
     manifest_text = once(manifest_text, 'android:versionName="1.3"',
-        'android:versionName="3.3-smoke-phase9"', 'versao')
+        'android:versionName="' + version_name + '"', 'versao')
     manifest_text = once(manifest_text, 'android:versionCode="4"',
-        'android:versionCode="9"', 'versionCode do APK de homologacao')
+        'android:versionCode="' + version_code + '"', 'versionCode do APK')
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Code remains in the io.freemytv Java namespace. Explicit components
@@ -390,7 +414,7 @@ def main() -> None:
     if 'android:name="io.freemytv.EpgActivity"' not in manifest_text:
         raise RuntimeError("EpgActivity nao registrada")
     manifest_text = manifest_text.replace('android:label="Free My TV"',
-        'android:label="Free My TV Fase 9 (Teste)"')
+        'android:label="' + label + '"')
     manifest.write_text(manifest_text, encoding='utf-8')
 
     # HomeMode issues ADB operations against PACKAGE/CLASS components.
@@ -426,7 +450,7 @@ def main() -> None:
     print('REAL HOME LAUNCHER: ' + test_package
           + ' with HOME/DEFAULT + LEANBACK/LAUNCHER on HomeActivity.')
     print('Settings opens from Home gear. Discover and EPG are internal.')
-    print('Phase 9: emulator smoke, protected Home recovery, stable EPG/catalog integration.')
+    print('Phase 10: release-safe package, version and signature gates; current mode: ' + ('PRODUCTION' if release_mode else 'PREVIEW'))
 
 if __name__ == "__main__":
     main()
