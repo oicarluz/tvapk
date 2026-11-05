@@ -1,12 +1,13 @@
-name: Compilar Free My TV (fase 6)
+name: Compilar Free My TV (fase 7 - RC)
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5', 'feature/stability-settings-phase-6']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5', 'feature/stability-settings-phase-6', 'feature/release-readiness-phase-7']
     paths:
       - personalizar.py
       - extensions/**
       - tests/**
+      - tools/**
       - .github/workflows/gerar-apk.yml
 jobs:
   apk:
@@ -42,7 +43,9 @@ jobs:
       - name: Aplicar personalizacao
         run: python3 personalizar.py projeto
       - name: Verificar integrações, privilégios e persistência
-        run: python3 tests/phase6_smoke.py projeto
+        run: |
+          python3 tests/phase6_smoke.py projeto io.freemytv.homep7test
+          python3 tests/phase7_smoke.py projeto
       - name: Compilar sem chave TMDB embutida
         env:
           FREEMYTV_SIGNING_B64: ${{ secrets.FREEMYTV_KEYSTORE_BASE64 }}
@@ -85,7 +88,7 @@ jobs:
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
           grep -q 'android.intent.category.HOME' /tmp/manifest.txt
           grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
-          grep -q 'io.freemytv.homep6test' /tmp/manifest.txt
+          grep -q 'io.freemytv.homep7test' /tmp/manifest.txt
           "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
           test -s projeto/app/src/io/freemytv/HomeChannelPins.java
           test -s projeto/app/src/io/freemytv/HomeImageCache.java
@@ -124,11 +127,19 @@ jobs:
           grep -q 'PendingUniSearch.remember(this,item.title)' projeto/app/src/io/freemytv/MediaCatalogActivity.java
           grep -q 'epgRequestId' projeto/app/src/io/freemytv/HomeDashboardView.java
           grep -q 'HomeFavoritesTransfer.export(this)' projeto/app/src/io/freemytv/HomeFavoritesActivity.java
-          echo "OK: HOME real, favoritos organizáveis, importação manual e race EPG corrigida."
+          grep -q 'fallbackToClassic' projeto/app/src/io/freemytv/HomeActivity.java
+          grep -q 'heroRequestId' projeto/app/src/io/freemytv/HomeDashboardView.java
+          grep -q 'MAX_FILE_BYTES = 900_000' projeto/app/src/io/freemytv/HomeImageCache.java
+          echo "OK: RC with guarded Home fallback, TV favorites, EPG/hero concurrency and backup."
+      - name: Gerar SHA-256 para verificacao do instalador
+        run: |
+          sha256sum projeto/FreeMyTV.apk > projeto/FreeMyTV.apk.sha256
+          test -s projeto/FreeMyTV.apk.sha256
       - name: Publicar APK de homologacao (sem chave privada)
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-home-phase6-favorites-stability-test
+          name: freemytv-phase7-rc-tcl-test
           path: |
             projeto/FreeMyTV.apk
+            projeto/FreeMyTV.apk.sha256
           if-no-files-found: error
