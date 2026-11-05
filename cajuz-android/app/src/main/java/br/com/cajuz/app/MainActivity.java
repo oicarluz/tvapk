@@ -45,6 +45,13 @@ public final class MainActivity extends Activity {
   private ValueCallback<Uri[]> files;
   private String startUrl = "";
   private String host = "";
+  private static final String LOCK_PREF = "lock_enabled";
+  private CajuzGuard guard;
+  private FrameLayout appFrame;
+  private View cover;
+  private boolean locked=false;
+  private boolean lockEnabled(){return getPreferences(MODE_PRIVATE).getBoolean(LOCK_PREF,false);}
+
 
   private int px(int dp) { return (int)(dp * getResources().getDisplayMetrics().density + .5f); }
   private TextView label(String value, int size, int color) {
@@ -59,11 +66,15 @@ public final class MainActivity extends Activity {
     getWindow().setStatusBarColor(BG);
     getWindow().setNavigationBarColor(BG);
     getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+    guard=new CajuzGuard(this);
     startUrl=getPreferences(MODE_PRIVATE).getString("site_url","");
-    if(startUrl.isEmpty()) setup(); else browser();
+    if(startUrl.isEmpty()) setup();
+    else if(lockEnabled()){ locked=true; showLockedStart(); }
+    else browser();
   }
   private void setup() {
     if(web!=null) { web.destroy(); web=null; }
+    appFrame=null; cover=null;
     ScrollView scroll=new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BG);
     LinearLayout body=stack(); body.setPadding(px(26),px(65),px(26),px(26)); scroll.addView(body);
     TextView logo=label("C",43,Color.WHITE); logo.setGravity(Gravity.CENTER);
@@ -176,9 +187,60 @@ public final class MainActivity extends Activity {
         Toast.makeText(this,"Download iniciado.",Toast.LENGTH_SHORT).show();
       } catch(Exception e){external(url);}
     });
-    setContentView(root);
+    appFrame=new FrameLayout(this);
+    appFrame.addView(root,new FrameLayout.LayoutParams(-1,-1));
+    setContentView(appFrame);
+    if(locked)showCover();
     web.loadUrl(startUrl);
   }
+
+  private void showLockedStart(){
+    appFrame=new FrameLayout(this);appFrame.setBackgroundColor(BG);
+    setContentView(appFrame);
+    showCover();
+  }
+  private void showCover(){
+    if(appFrame==null||cover!=null)return;
+    LinearLayout panel=stack();panel.setBackgroundColor(BG);
+    panel.setGravity(Gravity.CENTER);
+    panel.setPadding(px(30),px(28),px(30),px(28));
+    TextView emblem=label("C",46,Color.WHITE);
+    emblem.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+    emblem.setGravity(Gravity.CENTER);emblem.setBackgroundColor(GREEN);
+    LinearLayout.LayoutParams el=size(px(78),px(78));
+    el.bottomMargin=px(24);panel.addView(emblem,el);
+    TextView heading=label("Cajuz protegido",24,Color.WHITE);
+    heading.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+    heading.setGravity(Gravity.CENTER);
+    panel.addView(heading,size(-1,px(52)));
+    TextView note=label("Use a biometria ou o bloqueio do dispositivo para continuar.",15,0xFFBECAC2);
+    note.setGravity(Gravity.CENTER);
+    LinearLayout.LayoutParams nl=size(-1,px(82));
+    nl.bottomMargin=px(8);panel.addView(note,nl);
+    Button unlock=new Button(this);unlock.setAllCaps(false);
+    unlock.setText("Desbloquear");
+    unlock.setTextColor(Color.WHITE);
+    unlock.setBackgroundTintList(ColorStateList.valueOf(GREEN));
+    panel.addView(unlock,size(-1,px(54)));
+    unlock.setOnClickListener(v->guard.verify(()->{
+      locked=false;hideCover();
+      if(web==null)browser();
+    }));
+    cover=panel;
+    appFrame.addView(panel,new FrameLayout.LayoutParams(-1,-1));
+  }
+  private void hideCover(){
+    if(appFrame!=null&&cover!=null)appFrame.removeView(cover);
+    cover=null;
+  }
+  private void changeLock(){
+    boolean enabled=lockEnabled();
+    guard.verify(()->{
+      getPreferences(MODE_PRIVATE).edit().putBoolean(LOCK_PREF,!enabled).apply();
+      Toast.makeText(this,enabled?"Bloqueio desativado.":"Bloqueio ativado.",Toast.LENGTH_SHORT).show();
+    });
+  }
+
   private void external(String url){
     try{ startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(url))); }
     catch(Exception e){Toast.makeText(this,"Não foi possível abrir o link.",Toast.LENGTH_SHORT).show();}
@@ -186,14 +248,25 @@ public final class MainActivity extends Activity {
   @Override protected void onActivityResult(int code,int result,Intent data){
     super.onActivityResult(code,result,data);
     if(code==FILE_PICKER&&files!=null){ files.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(result,data));files=null; }
+    if(code==CajuzGuard.DEVICE_CREDENTIAL&&guard!=null)guard.credentialResult(result);
   }
   @Override public void onBackPressed(){
+    if(locked){finish();return;}
     if(web!=null&&web.canGoBack())web.goBack();
     else if(web!=null)new AlertDialog.Builder(this).setMessage("Sair do Cajuz?")
       .setNegativeButton("Cancelar",null).setPositiveButton("Sair",(d,w)->finish()).show();
     else super.onBackPressed();
   }
-  @Override protected void onPause(){super.onPause();if(web!=null)web.onPause();CookieManager.getInstance().flush();}
-  @Override protected void onResume(){super.onResume();if(web!=null)web.onResume();}
+  @Override protected void onPause(){
+    if(lockEnabled()&&!startUrl.isEmpty()){locked=true;showCover();}
+    if(web!=null)web.onPause();
+    CookieManager.getInstance().flush();
+    super.onPause();
+  }
+  @Override protected void onResume(){
+    super.onResume();
+    if(web!=null)web.onResume();
+    if(lockEnabled()&&locked)showCover();
+  }
   @Override protected void onDestroy(){if(web!=null){web.destroy();web=null;}super.onDestroy();}
 }
