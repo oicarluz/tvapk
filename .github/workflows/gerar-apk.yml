@@ -1,8 +1,8 @@
-name: Compilar Free My TV (fase 1)
+name: Compilar Free My TV (fase 2)
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2']
     paths:
       - personalizar.py
       - extensions/**
@@ -63,10 +63,12 @@ jobs:
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
           grep -q 'android.intent.category.HOME' /tmp/manifest.txt
           grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
-          grep -q 'io.freemytv.homep1test' /tmp/manifest.txt
+          grep -q 'io.freemytv.homep2test' /tmp/manifest.txt
           "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
           test -s projeto/app/src/io/freemytv/HomeChannelPins.java
           test -s projeto/app/src/io/freemytv/HomeImageCache.java
+          test -s projeto/app/src/io/freemytv/HomeDashboardView.java
+          test -s projeto/app/src/io/freemytv/HomeEpgSnapshot.java
           grep -q 'MAX_PINNED = 30' projeto/app/src/io/freemytv/HomeChannelPins.java
           grep -q 'setOnLongClickListener' projeto/app/src/io/freemytv/EpgActivity.java
           grep -q 'HomeImageCache.read' projeto/app/src/io/freemytv/EpgActivity.java
@@ -74,11 +76,16 @@ jobs:
             echo 'ERRO: acessibilidade nao deve ler conteudo de outros apps nesta fase' >&2
             exit 1
           fi
-          echo "OK: Home original, 30 pins persistentes, cache de imagens, sem acessibilidade de captura."
+          grep -q 'dashboard = new HomeDashboardView(this)' projeto/app/src/io/freemytv/HomeActivity.java
+          grep -q 'dashboard.resume()' projeto/app/src/io/freemytv/HomeActivity.java
+          grep -q 'initial_kind' projeto/app/src/io/freemytv/DiscoverActivity.java
+          grep -q 'HomeChannelPins.list' projeto/app/src/io/freemytv/HomeDashboardView.java
+          grep -q 'HomeApps.shelfPackages' projeto/app/src/io/freemytv/HomeDashboardView.java
+          echo "OK: HomeActivity com dashboard + fallback, catalogo prefiltrado, EPG e apps fixados."
       - name: Publicar APK de homologacao (sem chave privada)
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-home-phase1-test
+          name: freemytv-home-phase2-dashboard-test
           path: |
             projeto/FreeMyTV.apk
           if-no-files-found: error
