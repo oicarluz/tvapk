@@ -1,15 +1,15 @@
-name: Free My TV (fase 9 - homologação técnica)
+name: Free My TV (fase 10 - pre-release)
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5', 'feature/stability-settings-phase-6', 'feature/release-readiness-phase-7', 'feature/epg-catalog-hardening-phase-8', 'feature/android-smoke-phase-9']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5', 'feature/stability-settings-phase-6', 'feature/release-readiness-phase-7', 'feature/epg-catalog-hardening-phase-8', 'feature/android-smoke-phase-9', 'feature/release-pipeline-phase-10']
     paths:
       - personalizar.py
       - extensions/**
       - tests/**
       - tools/**
-      - docs/FASE-9-TESTES.md
-      - docs/FASE-9-TESTES.md
+      - docs/FASE-10-RELEASE.md
+      - docs/FASE-10-RELEASE.md
       - .github/workflows/gerar-apk.yml
 jobs:
   apk:
@@ -38,17 +38,19 @@ jobs:
           "$SDKMANAGER" --install 'platforms;android-34' 'build-tools;35.0.0'
           "$SDKMANAGER" --list_installed | grep -E 'platforms;android-34|build-tools;35.0.0'
 
-      - name: Conferir sintaxe Python antes do download
-        run: python3 -m py_compile personalizar.py
+      - name: Conferir sintaxe e identidade de producao bloqueada por assinatura
+        run: |
+          python3 -m py_compile personalizar.py
+          python3 tests/phase10_identity.py
       - name: Clonar versao oficial fixa
         run: git clone --depth 1 --branch v1.3.0 https://github.com/simbasjungles/free-my-tv.git projeto
       - name: Aplicar personalizacao
         run: python3 personalizar.py projeto
       - name: Verificar integrações, privilégios e persistência
         run: |
-          python3 tests/phase6_smoke.py projeto io.freemytv.homep9test
-          python3 tests/phase7_smoke.py projeto io.freemytv.homep9test 9 3.3-smoke-phase9
-          python3 tests/phase8_smoke.py projeto io.freemytv.homep9test 9 3.3-smoke-phase9
+          python3 tests/phase6_smoke.py projeto io.freemytv.homep10test
+          python3 tests/phase7_smoke.py projeto io.freemytv.homep10test 10 3.4-phase10-preview
+          python3 tests/phase8_smoke.py projeto io.freemytv.homep10test 10 3.4-phase10-preview
       - name: Compilar sem chave TMDB embutida
         env:
           FREEMYTV_SIGNING_B64: ${{ secrets.FREEMYTV_KEYSTORE_BASE64 }}
@@ -91,7 +93,7 @@ jobs:
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
           grep -q 'android.intent.category.HOME' /tmp/manifest.txt
           grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
-          grep -q 'io.freemytv.homep9test' /tmp/manifest.txt
+          grep -q 'io.freemytv.homep10test' /tmp/manifest.txt
           "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
           test -s projeto/app/src/io/freemytv/HomeChannelPins.java
           test -s projeto/app/src/io/freemytv/HomeImageCache.java
@@ -138,23 +140,24 @@ jobs:
           grep -q 'EpgFeedCache.get(context, feed)' projeto/app/src/io/freemytv/HomeEpgSnapshot.java
           grep -q 'ch.key=HomeChannelPins.canonical(ch.name)' projeto/app/src/io/freemytv/EpgActivity.java
           echo "OK: HOME, shared EPG sources/cache, persistent pins, remote focus and catalogs."
-      - name: Preparar pacote de homologacao da Fase 9
+      - name: Preparar pacote de pre-lancamento da Fase 10
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p pacote-fase9
-          cp projeto/FreeMyTV.apk pacote-fase9/FreeMyTV-Fase-9.apk
-          cp tools/tcl-diagnostico.ps1 pacote-fase9/tcl-diagnostico.ps1
-          cp docs/FASE-9-TESTES.md pacote-fase9/LEIA-ME-Fase-9.md
-          (cd pacote-fase9 && sha256sum FreeMyTV-Fase-9.apk > SHA256.txt)
-          test -s pacote-fase9/FreeMyTV-Fase-9.apk
-          test -s pacote-fase9/SHA256.txt
+          mkdir -p pacote-fase10
+          cp projeto/FreeMyTV.apk pacote-fase10/FreeMyTV-Fase-10-Teste.apk
+          cp tools/tcl-diagnostico.ps1 pacote-fase10/tcl-diagnostico.ps1
+          cp docs/FASE-10-RELEASE.md pacote-fase10/LEIA-ME-Fase-10.md
+          cp projeto/LICENSE pacote-fase10/LICENSE-Free-My-TV-MIT.txt
+          (cd pacote-fase10 && sha256sum FreeMyTV-Fase-10-Teste.apk > SHA256.txt)
+          test -s pacote-fase10/FreeMyTV-Fase-10-Teste.apk
+          test -s pacote-fase10/SHA256.txt
       - name: Publicar APK e roteiro de homologacao
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-phase9-technical-test
+          name: freemytv-phase10-preview-test
           path: |
-            pacote-fase9/*
+            pacote-fase10/*
           if-no-files-found: error
 
   emulator:
@@ -174,7 +177,7 @@ jobs:
       - name: Download exact APK from build job
         uses: actions/download-artifact@v4
         with:
-          name: freemytv-phase9-technical-test
+          name: freemytv-phase10-preview-test
           path: install-packet
       - name: Enable KVM virtualization
         run: |
@@ -193,11 +196,11 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 600
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: bash tests/phase9_emulator.sh install-packet/FreeMyTV-Fase-9.apk emulator-results
+          script: bash tests/phase9_emulator.sh install-packet/FreeMyTV-Fase-10-Teste.apk emulator-results io.freemytv.homep10test
       - name: Preserve diagnostic log even if emulator fails
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-phase9-emulator-diagnostics
+          name: freemytv-phase10-emulator-diagnostics
           path: emulator-results/*
           if-no-files-found: ignore
