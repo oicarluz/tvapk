@@ -8,6 +8,7 @@ on:
       - extensions/**
       - tests/**
       - tools/**
+      - docs/FASE-8-EPG-HOME.md
       - .github/workflows/gerar-apk.yml
 jobs:
   apk:
