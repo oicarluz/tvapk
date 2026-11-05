@@ -2,7 +2,7 @@ name: Compilar Free My TV + UniTVnet
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/unitvnet-channel-navigation']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/unitvnet-channel-navigation', 'feature/unitvnet-accessibility-fix']
     paths:
       - personalizar.py
       - extensions/**
@@ -63,14 +63,19 @@ jobs:
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
           grep -q 'android.intent.category.HOME' /tmp/manifest.txt
           grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
-          grep -q 'io.freemytv.unitvchanneltest' /tmp/manifest.txt
+          grep -q 'io.freemytv.unitvassisttest' /tmp/manifest.txt
           grep -q 'RemoteKeyService' /tmp/manifest.txt
+          grep -q 'UniChannelService' /tmp/manifest.txt
+          grep -q 'android.permission.BIND_ACCESSIBILITY_SERVICE' /tmp/manifest.txt
           "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
-          echo "OK: HomeActivity e o app icon abrem a HOME original, com categoria HOME, LEANBACK e EPG."
+          "$BT/aapt" dump xmltree "$APK" res/xml/unitv_channel_service.xml > /tmp/unitv-accessibility.txt
+          grep -q 'android:canRetrieveWindowContent' /tmp/unitv-accessibility.txt
+          grep -q 'com.unitvnet.tvod' /tmp/unitv-accessibility.txt
+          echo "OK: launcher e servico dedicado UniChannelService detectados no APK."
       - name: Publicar APK de homologacao (sem chave privada)
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-launcher-unitvnet-channel-test
+          name: freemytv-unitvnet-accessibility-v24-test
           path: |
             projeto/FreeMyTV.apk
           if-no-files-found: error
