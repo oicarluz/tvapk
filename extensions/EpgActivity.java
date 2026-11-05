@@ -7,6 +7,8 @@ import android.graphics.BitmapFactory;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.view.KeyEvent;
+import android.widget.HorizontalScrollView;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
@@ -48,7 +50,7 @@ import java.util.concurrent.Executors;
  */
 public final class EpgActivity extends Activity {
     private static final String BASE="https://raw.githubusercontent.com/limaalef/BrazilTVEPG/main/";
-    private static final String[] FEEDS={"globo.xml","maissbt.xml","epg.xml","claro.xml"};
+    private static final String[] FEEDS={"globo.xml","maissbt.xml","epg.xml","claro.xml","plutotv.xml","xsports.xml"};
     private static final long TTL=4L*60*60*1000;
     private static final long MAX_XML=30L*1024*1024;
     private static final int BG=0xff101421, CARD=0xff1b2334, FOCUS=0xff324b76, WHITE=0xfff4f7ff, MUTED=0xffb5c1d4;
@@ -60,16 +62,23 @@ public final class EpgActivity extends Activity {
         @Override protected boolean removeEldestEntry(Map.Entry<String,Bitmap> entry) {return size()>32;}
     };
     private LinearLayout list, tabs;
+    private ScrollView scroll;
     private TextView status;
     private String category="Todos", focusedKey=null;
     private boolean alive=true;
+    private int visibleLimit=64;
+    private static final int PAGE=64;
+    private static final int SELECTED=0xff254879;
     private int viewGeneration=0, loadedFeeds=0, failedFeeds=0;
-    private static final String[] CATEGORIES={"Todos","Abertos","Fechados"};
+    private static final String[] CATEGORIES={
+        "Todos","Abertos","Fechados","Esportes","Filmes","Infantil","Notícias","Fixados"
+    };
     static final class Channel {
         String key,id,name,logo="",now="",next="";
         long start,end,nextAt=Long.MAX_VALUE;
         boolean open;
     }
+    private int dp(float v){return Math.round(v*getResources().getDisplayMetrics().density);}
     private GradientDrawable shape(int color){
         GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(16);return d;
     }
