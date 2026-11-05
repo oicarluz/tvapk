@@ -283,8 +283,7 @@ public final class EpgActivity extends Activity {
             if(tab==2){
                 intent=new Intent(this,MoviesActivity.class);
             }else{
-                intent=new Intent(this,DiscoverActivity.class);
-                intent.putExtra("initial_kind",2);
+                intent=new Intent(this,SeriesActivity.class);
             }
             startActivity(intent);
             finish();
