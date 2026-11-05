@@ -82,7 +82,7 @@ def main() -> None:
                          "HomeFavoritesActivity.class",
                          "HomeApps.shelfPackages(activity)",
                          "HomeEpgSnapshot.load(activity,pinned)",
-                         "private int epgRequestId")
+                         "featureIndex, epgRequestId;")
     assert "int ticket=++generation;" not in home_ui[home_ui.index("private void loadHero()"):home_ui.index("private void loadBackdrop(")]
     assert "int ticket=generation;" in home_ui[home_ui.index("private void loadHero()"):home_ui.index("private void loadBackdrop(")]
     assert "epgRequestId++;" in home_ui
