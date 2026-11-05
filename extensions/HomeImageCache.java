@@ -17,7 +17,7 @@ import java.util.Comparator;
  */
 final class HomeImageCache {
     private static final long TTL = 7L * 24L * 60L * 60L * 1000L;
-    private static final int MAX_FILE_BYTES = 384_000;
+    private static final int MAX_FILE_BYTES = 900_000; // Include TMDB w780 banners, not just small channel logos.
     private static final int MAX_FILES = 80;
     private static final long MAX_DIR_BYTES = 16L * 1024L * 1024L;
     private static final Object LOCK = new Object();
