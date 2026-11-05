@@ -377,7 +377,15 @@ final class HomeDashboardView extends LinearLayout {
     }
     private void refreshChannels(){
         if(channelRow==null)return;
+        // Replacing rows after an EPG update used to drop TCL remote focus.
+        View previouslyFocused=channelRow.getFocusedChild();
+        String focusKey=previouslyFocused!=null&&previouslyFocused.getTag() instanceof String
+            ?(String)previouslyFocused.getTag():null;
+        HorizontalScrollView strip=channelRow.getParent() instanceof HorizontalScrollView
+            ?(HorizontalScrollView)channelRow.getParent():null;
+        int oldScroll=strip==null?0:strip.getScrollX();
         channelRow.removeAllViews();
+        View focusReplacement=null;
         List<HomeChannelPins.Channel> pinned=HomeChannelPins.list(activity);
         if(channelSubtitle!=null){
             channelSubtitle.setText(pinned.isEmpty()?
@@ -394,6 +402,8 @@ final class HomeDashboardView extends LinearLayout {
         for(HomeChannelPins.Channel c:pinned){
             HomeEpgSnapshot.Guide current=epg==null?null:epg.get(c.key);
             LinearLayout panel=new LinearLayout(activity);
+            panel.setTag(c.key);
+            if(focusKey!=null&&focusKey.equals(c.key))focusReplacement=panel;
             panel.setOrientation(VERTICAL);
             panel.setPadding(dp(13),dp(9),dp(13),dp(8));
             panel.setBackground(focusShape(false));
@@ -429,6 +439,11 @@ final class HomeDashboardView extends LinearLayout {
             panel.addView(progress,new LinearLayout.LayoutParams(-1,dp(6)));
             panel.setOnClickListener(v->openUni());
         }
+        if(strip!=null&&oldScroll>0)strip.post(()->strip.scrollTo(oldScroll,0));
+        final View focusTarget=focusReplacement;
+        if(focusTarget!=null)focusTarget.post(()->{
+            if(active&&focusTarget.isAttachedToWindow())focusTarget.requestFocus();
+        });
     }
     private String clock(long millis){
         return new java.text.SimpleDateFormat("HH:mm",new Locale("pt","BR"))
