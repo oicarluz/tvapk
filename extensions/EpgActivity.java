@@ -236,7 +236,8 @@ public final class EpgActivity extends Activity {
         b.setOnClickListener(v->action.run());
         b.setOnFocusChangeListener((v,focus)->{
             if(focus)b.setBackground(shape(FOCUS));
-            else b.setBackground(shape(b.getParent()==tabs&&category.equals(name)?SELECTED:CARD));
+            else b.setBackground(shape((b.getParent()==tabs&&category.equals(name))
+                || (b.getParent()!=tabs&&"Agora na TV".equals(name))?SELECTED:CARD));
         });
         return b;
     }
@@ -318,8 +319,10 @@ public final class EpgActivity extends Activity {
         }
         main.post(()->{
             if(!alive)return;
-            if(all.isEmpty())status.setText("Não foi possível carregar os guias. Verifique internet e tente reabrir.");
-            else updateStatus();
+            if(all.isEmpty()){
+                render();
+                status.setText("Não foi possível carregar o EPG. Verifique a internet ou tente novamente.");
+            }else updateStatus();
         });
     }
     private File cacheFile(String name) throws Exception{
