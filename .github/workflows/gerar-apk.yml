@@ -1,8 +1,8 @@
-name: Compilar Free My TV + UniTVnet
+name: Compilar Free My TV (fase 1)
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1']
     paths:
       - personalizar.py
       - extensions/**
@@ -63,13 +63,22 @@ jobs:
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
           grep -q 'android.intent.category.HOME' /tmp/manifest.txt
           grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
-          grep -q 'io.freemytv.launchertvtest' /tmp/manifest.txt
+          grep -q 'io.freemytv.homep1test' /tmp/manifest.txt
           "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
-          echo "OK: HomeActivity e o app icon abrem a HOME original, com categoria HOME, LEANBACK e EPG."
+          test -s projeto/app/src/io/freemytv/HomeChannelPins.java
+          test -s projeto/app/src/io/freemytv/HomeImageCache.java
+          grep -q 'MAX_PINNED = 30' projeto/app/src/io/freemytv/HomeChannelPins.java
+          grep -q 'setOnLongClickListener' projeto/app/src/io/freemytv/EpgActivity.java
+          grep -q 'HomeImageCache.read' projeto/app/src/io/freemytv/EpgActivity.java
+          if grep -q 'android:canRetrieveWindowContent="true"' projeto/app/res/xml/remote_key_service.xml; then
+            echo 'ERRO: acessibilidade nao deve ler conteudo de outros apps nesta fase' >&2
+            exit 1
+          fi
+          echo "OK: Home original, 30 pins persistentes, cache de imagens, sem acessibilidade de captura."
       - name: Publicar APK de homologacao (sem chave privada)
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-home-original-epg-launcher-test
+          name: freemytv-home-phase1-test
           path: |
             projeto/FreeMyTV.apk
           if-no-files-found: error
