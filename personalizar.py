@@ -383,7 +383,7 @@ def main() -> None:
         'private static final String REMOTE_SERVICE = PKG + "/" + PKG + ".RemoteKeyService";',
         'private static final String REMOTE_SERVICE = PKG + "/io.freemytv.RemoteKeyService";',
         'controle remoto pacote teste')
-    for kind in ('HomeActivity', 'SettingsActivity', 'RemoteKeyService', 'NowPlaying'):
+    for kind in ('HomeActivity', 'SettingsActivity', 'NowPlaying'):
         mode_text = once(mode_text, 'PKG + "/" + PKG + ".' + kind + '"',
             'PKG + "/io.freemytv.' + kind + '"', kind + ' componente')
     mode_text = once(mode_text,
