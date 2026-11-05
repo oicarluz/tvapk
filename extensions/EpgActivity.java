@@ -141,27 +141,143 @@ public final class EpgActivity extends Activity {
     }
     @Override public void onCreate(Bundle saved){
         super.onCreate(saved);
-        LinearLayout root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BG);root.setPadding(32,18,32,15);setContentView(root);
-        TextView heading=text("TV AO VIVO   ·   Free My TV Discover",24,true);
-        root.addView(heading);
-        status=text("Carregando EPG externo…",13,false);status.setTextColor(MUTED);root.addView(status);
-        tabs=new LinearLayout(this);root.addView(tabs,new LinearLayout.LayoutParams(-1,58));
+        LinearLayout root=new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(BG);
+        root.setPadding(dp(17),dp(7),dp(17),dp(10));
+        setContentView(root);
+        buildNavigation(root);
+
+        LinearLayout heading=new LinearLayout(this);
+        heading.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,dp(43));
+        hp.topMargin=dp(3);
+        root.addView(heading,hp);
+        TextView title=text("Agora na TV",22,true);
+        heading.addView(title,new LinearLayout.LayoutParams(0,-1,1));
+        TextView hint=text("OK: abre UniTVnet    ·    Segurar OK: fixa/desafixa na Home",12,false);
+        hint.setTextColor(MUTED);
+        heading.addView(hint);
+
+        status=text("Buscando programação externa…",12,false);
+        status.setTextColor(MUTED);
+        root.addView(status,new LinearLayout.LayoutParams(-1,dp(25)));
+
+        HorizontalScrollView categoryScroller=new HorizontalScrollView(this);
+        categoryScroller.setHorizontalScrollBarEnabled(false);
+        tabs=new LinearLayout(this);
+        tabs.setGravity(Gravity.CENTER_VERTICAL);
+        categoryScroller.addView(tabs);
+        root.addView(categoryScroller,new LinearLayout.LayoutParams(-1,dp(48)));
         for(String name:CATEGORIES){
-            Button b=new Button(this);b.setAllCaps(false);b.setText(name);b.setTextSize(14);
-            b.setTextColor(WHITE);b.setBackground(shape(CARD));
-            LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,52,1);bp.setMargins(3,3,3,3);
-            tabs.addView(b,bp);b.setOnClickListener(v->{category=name;focusedKey=null;render();});
-            b.setOnFocusChangeListener((v,focus)->b.setBackground(shape(focus?FOCUS:CARD)));
+            Button button=menuButton(name,()->{
+                if(!category.equals(name)){
+                    category=name;
+                    visibleLimit=PAGE;
+                    focusedKey=null;
+                    if(scroll!=null)scroll.scrollTo(0,0);
+                    render();
+                }
+                updateTabColors();
+            });
+            LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(dp(112),dp(37));
+            bp.setMargins(0,0,dp(8),0);
+            tabs.addView(button,bp);
         }
-        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
-        list=new LinearLayout(this);list.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(list);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        TextView foot=text("OK: abrir UniTVnet  ·  Segurar OK: fixar/desafixar canal  ·  Voltar: início",12,false);
-        foot.setTextColor(MUTED);root.addView(foot);
-        list.addView(text("Buscando canais abertos e fechados…",16,false));
+        updateTabColors();
+
+        LinearLayout columns=new LinearLayout(this);
+        columns.setPadding(dp(10),dp(3),dp(8),dp(3));
+        columns.setGravity(Gravity.CENTER_VERTICAL);
+        root.addView(columns,new LinearLayout.LayoutParams(-1,dp(27)));
+        headerText(columns,"CANAL",135,0);
+        headerText(columns,"PROGRAMA AGORA",0,2);
+        headerText(columns,"HORÁRIO / PROGRESSO",0,1);
+        headerText(columns,"A SEGUIR",0,1);
+
+        scroll=new ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.setVerticalScrollBarEnabled(false);
+        list=new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(list);
+        root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+
+        TextView footer=text("★ fixado na Home   ·   ↑↓ navegar   ·   Categorias na faixa superior   ·   Voltar: Início",11,false);
+        footer.setTextColor(MUTED);
+        root.addView(footer,new LinearLayout.LayoutParams(-1,dp(25)));
+        list.addView(text("Carregando canais…",15,false));
         jobs.execute(this::loadAll);
     }
+
+    private void headerText(LinearLayout row,String label,int fixed,int weight){
+        TextView t=text(label,10,true);
+        t.setTextColor(MUTED);
+        row.addView(t,fixed>0
+            ?new LinearLayout.LayoutParams(dp(fixed),-1)
+            :new LinearLayout.LayoutParams(0,-1,weight));
+    }
+
+    private Button menuButton(String name,Runnable action){
+        Button b=new Button(this);
+        b.setAllCaps(false);
+        b.setText(name);
+        b.setTextColor(WHITE);
+        b.setTextSize(12);
+        b.setPadding(dp(8),0,dp(8),0);
+        b.setBackground(shape(CARD));
+        b.setOnClickListener(v->action.run());
+        b.setOnFocusChangeListener((v,focus)->{
+            if(focus)b.setBackground(shape(FOCUS));
+            else b.setBackground(shape(b.getParent()==tabs&&category.equals(name)?SELECTED:CARD));
+        });
+        return b;
+    }
+
+    private void updateTabColors(){
+        for(int i=0;i<tabs.getChildCount()&&i<CATEGORIES.length;i++){
+            View child=tabs.getChildAt(i);
+            if(!child.isFocused())
+                child.setBackground(shape(CATEGORIES[i].equals(category)?SELECTED:CARD));
+        }
+    }
+
+    private void buildNavigation(LinearLayout root){
+        LinearLayout nav=new LinearLayout(this);
+        nav.setGravity(Gravity.CENTER_VERTICAL);
+        root.addView(nav,new LinearLayout.LayoutParams(-1,dp(48)));
+        TextView logo=text("▸  Free My TV",19,true);
+        logo.setTextColor(0xff39c9ff);
+        nav.addView(logo,new LinearLayout.LayoutParams(dp(160),-1));
+        String[] labels={"Início","Agora na TV","Filmes","Séries","Apps"};
+        for(int i=0;i<labels.length;i++){
+            final int target=i;
+            Button b=menuButton(labels[i],()->navigate(target));
+            if(i==1)b.setBackground(shape(SELECTED));
+            LinearLayout.LayoutParams bp=new LinearLayout.LayoutParams(0,dp(38),1);
+            bp.setMargins(dp(3),0,dp(3),0);
+            nav.addView(b,bp);
+        }
+        Button settings=menuButton("⚙",()->startActivity(new Intent(this,SettingsActivity.class)));
+        nav.addView(settings,new LinearLayout.LayoutParams(dp(56),dp(38)));
+    }
+
+    private void navigate(int tab){
+        if(tab==1)return;
+        if(tab==0||tab==4){
+            Intent intent=new Intent(this,HomeActivity.class);
+            if(tab==4)intent.putExtra(HomeActivity.EXTRA_ALL_APPS,true);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP|Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+            finish();
+        }else{
+            Intent intent=new Intent(this,DiscoverActivity.class);
+            intent.putExtra("initial_kind",tab==2?1:2);
+            startActivity(intent);
+            finish();
+        }
+    }
+
     private void loadAll(){
         for(String feed:FEEDS){
             if(!alive)return;
