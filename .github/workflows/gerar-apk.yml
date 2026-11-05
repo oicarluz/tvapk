@@ -1,8 +1,8 @@
-name: Compilar Free My TV (fase 7 - RC)
+name: Compilar Free My TV (fase 8 - EPG)
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5', 'feature/stability-settings-phase-6', 'feature/release-readiness-phase-7']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4', 'feature/series-catalog-phase-5', 'feature/stability-settings-phase-6', 'feature/release-readiness-phase-7', 'feature/epg-catalog-hardening-phase-8']
     paths:
       - personalizar.py
       - extensions/**
@@ -44,8 +44,9 @@ jobs:
         run: python3 personalizar.py projeto
       - name: Verificar integrações, privilégios e persistência
         run: |
-          python3 tests/phase6_smoke.py projeto io.freemytv.homep7test
-          python3 tests/phase7_smoke.py projeto
+          python3 tests/phase6_smoke.py projeto io.freemytv.homep8test
+          python3 tests/phase7_smoke.py projeto io.freemytv.homep8test 8 3.2-epg-phase8
+          python3 tests/phase8_smoke.py projeto
       - name: Compilar sem chave TMDB embutida
         env:
           FREEMYTV_SIGNING_B64: ${{ secrets.FREEMYTV_KEYSTORE_BASE64 }}
@@ -88,12 +89,13 @@ jobs:
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
           grep -q 'android.intent.category.HOME' /tmp/manifest.txt
           grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
-          grep -q 'io.freemytv.homep7test' /tmp/manifest.txt
+          grep -q 'io.freemytv.homep8test' /tmp/manifest.txt
           "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
           test -s projeto/app/src/io/freemytv/HomeChannelPins.java
           test -s projeto/app/src/io/freemytv/HomeImageCache.java
           test -s projeto/app/src/io/freemytv/HomeDashboardView.java
           test -s projeto/app/src/io/freemytv/HomeEpgSnapshot.java
+          test -s projeto/app/src/io/freemytv/EpgFeedCache.java
           test -s projeto/app/src/io/freemytv/MoviesActivity.java
           test -s projeto/app/src/io/freemytv/SeriesActivity.java
           test -s projeto/app/src/io/freemytv/MediaCatalogActivity.java
@@ -130,22 +132,25 @@ jobs:
           grep -q 'fallbackToClassic' projeto/app/src/io/freemytv/HomeActivity.java
           grep -q 'heroRequestId' projeto/app/src/io/freemytv/HomeDashboardView.java
           grep -q 'MAX_FILE_BYTES = 900_000' projeto/app/src/io/freemytv/HomeImageCache.java
-          echo "OK: RC with guarded Home fallback, TV favorites, EPG/hero concurrency and backup."
-      - name: Preparar pacote de homologacao com instalador e roteiro TCL
+          grep -q 'for(String feed:EpgFeedCache.FEEDS)' projeto/app/src/io/freemytv/EpgActivity.java
+          grep -q 'EpgFeedCache.get(context, feed)' projeto/app/src/io/freemytv/HomeEpgSnapshot.java
+          grep -q 'ch.key=HomeChannelPins.canonical(ch.name)' projeto/app/src/io/freemytv/EpgActivity.java
+          echo "OK: HOME, shared EPG sources/cache, persistent pins, remote focus and catalogs."
+      - name: Preparar pacote de homologacao da Fase 8
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p pacote-fase7
-          cp projeto/FreeMyTV.apk pacote-fase7/FreeMyTV-Fase-7.apk
-          cp tools/tcl-diagnostico.ps1 pacote-fase7/tcl-diagnostico.ps1
-          cp docs/FASE-7-HOMOLOGACAO.md pacote-fase7/LEIA-ME-Fase-7.md
-          (cd pacote-fase7 && sha256sum FreeMyTV-Fase-7.apk > SHA256.txt)
-          test -s pacote-fase7/FreeMyTV-Fase-7.apk
-          test -s pacote-fase7/SHA256.txt
+          mkdir -p pacote-fase8
+          cp projeto/FreeMyTV.apk pacote-fase8/FreeMyTV-Fase-8.apk
+          cp tools/tcl-diagnostico.ps1 pacote-fase8/tcl-diagnostico.ps1
+          cp docs/FASE-8-EPG-HOME.md pacote-fase8/LEIA-ME-Fase-8.md
+          (cd pacote-fase8 && sha256sum FreeMyTV-Fase-8.apk > SHA256.txt)
+          test -s pacote-fase8/FreeMyTV-Fase-8.apk
+          test -s pacote-fase8/SHA256.txt
       - name: Publicar APK e roteiro de homologacao
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-phase7-rc-tcl-test
+          name: freemytv-phase8-epg-home-test
           path: |
-            pacote-fase7/*
+            pacote-fase8/*
           if-no-files-found: error
