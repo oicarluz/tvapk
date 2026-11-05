@@ -40,7 +40,7 @@ final class PendingUniChannel {
             if(info.getResolveInfo()!=null&&info.getResolveInfo().serviceInfo!=null){
                 String pkg=info.getResolveInfo().serviceInfo.packageName;
                 String name=info.getResolveInfo().serviceInfo.name;
-                if(context.getPackageName().equals(pkg)&&"io.freemytv.RemoteKeyService".equals(name))return true;
+                if(context.getPackageName().equals(pkg)&&(name.equals("io.freemytv.UniChannelService")||name.equals(".UniChannelService")))return true;
             }
         }
         return false;
