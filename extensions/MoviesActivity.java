@@ -78,7 +78,7 @@ public final class MoviesActivity extends Activity {
     private HorizontalScrollView genreScroll;
     private LinearLayout genreRow,root;
     private TextView status;
-    private Button retry;
+    private Button retry,sortButton;
     private ProgressBar loadingView;
     private int genre=0,sort=0,nextPage=1,generation=0;
     private boolean loading=false,hasMore=true,alive=true;
@@ -111,7 +111,12 @@ public final class MoviesActivity extends Activity {
         button.setMinimumWidth(0);
         button.setPadding(dp(10),0,dp(10),0);
         button.setBackground(rounded(PANEL,false));
-        button.setOnFocusChangeListener((v,focus)->button.setBackground(rounded(focus?FOCUS:PANEL,focus)));
+        button.setOnFocusChangeListener((v,focus)->{
+            Object tag=button.getTag();
+            boolean active="primary".equals(tag)
+                ||(tag instanceof Integer&&((Integer)tag)==genre);
+            button.setBackground(rounded(focus?FOCUS:(active?0xff284775:PANEL),focus));
+        });
         button.setOnClickListener(v->run.run());
         return button;
     }
@@ -130,9 +135,8 @@ public final class MoviesActivity extends Activity {
         root.addView(titleRow,new LinearLayout.LayoutParams(-1,dp(50)));
         TextView title=label("Filmes",23,true);
         titleRow.addView(title,new LinearLayout.LayoutParams(0,-1,1));
-        Button sorting=actionButton("Ordenar: Populares ▾",()->chooseSort());
-        sorting.setTag("sort");
-        titleRow.addView(sorting,new LinearLayout.LayoutParams(dp(192),dp(40)));
+        sortButton=actionButton("Ordenar: Populares ▾",()->chooseSort());
+        titleRow.addView(sortButton,new LinearLayout.LayoutParams(dp(192),dp(40)));
         Button search=actionButton("⌕  Buscar",()->search());
         LinearLayout.LayoutParams searchLp=new LinearLayout.LayoutParams(dp(125),dp(40));
         searchLp.leftMargin=dp(8);
@@ -170,7 +174,10 @@ public final class MoviesActivity extends Activity {
         grid.setStretchMode(GridView.STRETCH_COLUMN_WIDTH);
         grid.setClipToPadding(false);
         grid.setPadding(dp(3),dp(5),dp(3),dp(8));
-        grid.setSelector(android.R.color.transparent);
+        GradientDrawable selector=rounded(0x3339c9ff,true);
+        selector.setStroke(dp(3),ACCENT);
+        grid.setSelector(selector);
+        grid.setDrawSelectorOnTop(true);
         grid.setVerticalScrollBarEnabled(false);
         grid.setFocusable(true);
         adapter=new MovieAdapter();
@@ -215,7 +222,10 @@ public final class MoviesActivity extends Activity {
         for(int i=0;i<tabs.length;i++){
             final int index=i;
             Button b=actionButton(tabs[i],()->navigate(index));
-            if(i==2)b.setBackground(rounded(0xff284775,false));
+            if(i==2){
+                b.setTag("primary");
+                b.setBackground(rounded(0xff284775,false));
+            }
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(38),1);
             lp.setMargins(dp(3),0,dp(3),0);
             nav.addView(b,lp);
@@ -253,6 +263,7 @@ public final class MoviesActivity extends Activity {
                 updateGenres();
                 if(grid!=null)grid.setSelection(0);
             });
+            b.setTag(Integer.valueOf(current));
             LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(dp(Math.max(81,GENRES[i].length()*8+30)),dp(38));
             lp.setMargins(0,0,dp(7),0);
             genreRow.addView(b,lp);
@@ -270,6 +281,7 @@ public final class MoviesActivity extends Activity {
             .setSingleChoiceItems(SORTS,sort,(dialog,which)->{
                 dialog.dismiss();
                 sort=which;
+                if(sortButton!=null)sortButton.setText("Ordenar: "+SORTS[sort]+" ▾");
                 query="";
                 resetCatalog();
             }).setNegativeButton("Cancelar",null).show();
