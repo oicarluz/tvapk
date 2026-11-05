@@ -26,10 +26,6 @@ final class HomeEpgSnapshot {
         Guide(String key) { this.key = key; }
     }
 
-    private static final String SOURCE = "https://raw.githubusercontent.com/limaalef/BrazilTVEPG/main/";
-    private static final String[] FEEDS = {"epg.xml", "globo.xml", "maissbt.xml", "claro.xml"};
-    private static final long TTL = 4L * 60L * 60L * 1000L;
-    private static final long MAX_SIZE = 30L * 1024L * 1024L;
 
     private HomeEpgSnapshot() {}
 
@@ -42,51 +38,16 @@ final class HomeEpgSnapshot {
             result.put(channel.key, new Guide(channel.key));
             desired.put(channel.key, channel.key);
         }
-        for (String feed : FEEDS) {
+        for (String feed : EpgFeedCache.FEEDS) {
             if (Thread.currentThread().isInterrupted()) break;
             try {
-                File file = cached(context, feed);
+                File file = EpgFeedCache.get(context, feed);
                 if (file != null && file.isFile()) parse(file, desired, result);
             } catch (Exception ignored) {
                 // One provider cannot prevent rendering from the others.
             }
         }
         return result;
-    }
-
-    private static File cached(Context context, String feed) {
-        File file = new File(context.getCacheDir(), "xmltv-" + feed);
-        long age = System.currentTimeMillis() - file.lastModified();
-        if (file.isFile() && file.length() > 100 && age >= 0 && age < TTL) return file;
-        File temp = new File(context.getCacheDir(), "home-xmltv-" + feed + ".download");
-        HttpURLConnection connection = null;
-        try {
-            connection = (HttpURLConnection) new URL(SOURCE + feed).openConnection();
-            connection.setConnectTimeout(8500);
-            connection.setReadTimeout(16500);
-            connection.setRequestProperty("Accept-Encoding", "identity");
-            if (connection.getResponseCode() != 200) return file.isFile() ? file : null;
-            long length = 0;
-            try (InputStream in = connection.getInputStream();
-                 FileOutputStream out = new FileOutputStream(temp, false)) {
-                byte[] buf = new byte[16 * 1024];
-                int n;
-                while ((n = in.read(buf)) != -1) {
-                    length += n;
-                    if (length > MAX_SIZE) throw new IllegalStateException("EPG grande");
-                    out.write(buf, 0, n);
-                }
-            }
-            if (length < 100) return file.isFile() ? file : null;
-            if (file.exists() && !file.delete()) return file;
-            if (!temp.renameTo(file)) return null;
-            return file;
-        } catch (Exception ignored) {
-            return file.isFile() ? file : null;
-        } finally {
-            if (connection != null) connection.disconnect();
-            temp.delete();
-        }
     }
 
     private static String strip(String name) {
