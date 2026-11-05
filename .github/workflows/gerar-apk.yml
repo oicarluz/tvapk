@@ -1,8 +1,8 @@
-name: Compilar Free My TV (fase 3)
+name: Compilar Free My TV (fase 4)
 on:
   workflow_dispatch:
   push:
-    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3']
+    branches: [main, 'feature/discover-v2', 'feature/discover-v2-tv-epg-stable', 'feature/launcher-original-tv-epg', 'feature/home-redesign-phase-1', 'feature/home-redesign-phase-2', 'feature/guide-compact-phase-3', 'feature/movies-catalog-phase-4']
     paths:
       - personalizar.py
       - extensions/**
@@ -57,18 +57,20 @@ jobs:
           "$BT/aapt" dump badging "$APK" | head -n 12
           "$BT/aapt" dump xmltree "$APK" AndroidManifest.xml > /tmp/manifest.txt
           grep -q 'DiscoverActivity' /tmp/manifest.txt
+          grep -q 'MoviesActivity' /tmp/manifest.txt
           grep -q 'EpgActivity' /tmp/manifest.txt
           grep -q 'HomeActivity' /tmp/manifest.txt
           grep -q 'io.freemytv' /tmp/manifest.txt
           grep -q 'android.intent.category.LEANBACK_LAUNCHER' /tmp/manifest.txt
           grep -q 'android.intent.category.HOME' /tmp/manifest.txt
           grep -q 'io.freemytv.HomeActivity' /tmp/manifest.txt
-          grep -q 'io.freemytv.homep3test' /tmp/manifest.txt
+          grep -q 'io.freemytv.homep4test' /tmp/manifest.txt
           "$BT/aapt" dump badging "$APK" | grep -q "launchable-activity: name='io.freemytv.HomeActivity'"
           test -s projeto/app/src/io/freemytv/HomeChannelPins.java
           test -s projeto/app/src/io/freemytv/HomeImageCache.java
           test -s projeto/app/src/io/freemytv/HomeDashboardView.java
           test -s projeto/app/src/io/freemytv/HomeEpgSnapshot.java
+          test -s projeto/app/src/io/freemytv/MoviesActivity.java
           grep -q 'MAX_PINNED = 30' projeto/app/src/io/freemytv/HomeChannelPins.java
           grep -q 'TvRemotePress.bind' projeto/app/src/io/freemytv/EpgActivity.java
           test -s projeto/app/src/io/freemytv/TvRemotePress.java
@@ -85,11 +87,16 @@ jobs:
           grep -q 'initial_kind' projeto/app/src/io/freemytv/DiscoverActivity.java
           grep -q 'HomeChannelPins.list' projeto/app/src/io/freemytv/HomeDashboardView.java
           grep -q 'HomeApps.shelfPackages' projeto/app/src/io/freemytv/HomeDashboardView.java
-          echo "OK: HOME real com dashboard, guia categorizado, foco remoto e gesto OK longo."
+          grep -q 'new Intent(activity,MoviesActivity.class)' projeto/app/src/io/freemytv/HomeDashboardView.java
+          grep -q 'new Intent(this,MoviesActivity.class)' projeto/app/src/io/freemytv/EpgActivity.java
+          grep -q 'onScroll(AbsListView view,int first,int visible,int total)' projeto/app/src/io/freemytv/MoviesActivity.java
+          grep -q 'DiscoverData.from(response,"movie")' projeto/app/src/io/freemytv/MoviesActivity.java
+          grep -q 'PendingUniSearch.remember(this,item.title)' projeto/app/src/io/freemytv/MoviesActivity.java
+          echo "OK: HOME real com guia e Filmes por gênero, lazy pagination e cópia de título."
       - name: Publicar APK de homologacao (sem chave privada)
         uses: actions/upload-artifact@v4
         with:
-          name: freemytv-home-phase3-compact-guide-test
+          name: freemytv-home-phase4-movies-test
           path: |
             projeto/FreeMyTV.apk
           if-no-files-found: error
