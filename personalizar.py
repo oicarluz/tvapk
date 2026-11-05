@@ -97,7 +97,7 @@ def patch_remote(src: str) -> str:
 
     return once(src,
         '@Override public void onAccessibilityEvent(AccessibilityEvent event) {}',
-        '@Override public void onAccessibilityEvent(AccessibilityEvent event) { PendingUniSearch.tryFill(this, event); }',
+        '@Override public void onAccessibilityEvent(AccessibilityEvent event) { PendingUniSearch.tryFill(this, event); PendingUniChannel.inspect(this, event); }',
         'evento de acessibilidade')
 
 def patch_remote_xml(src: str) -> str:
@@ -260,7 +260,7 @@ def main() -> None:
     for path, source in changes.items():
         path.write_text(source, encoding="utf-8")
     ext = Path(__file__).resolve().parent / 'extensions'
-    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java'):
+    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java', 'PendingUniChannel.java'):
         path = ext / name
         if not path.is_file():
             raise RuntimeError(f'Extensao ausente: {path}')
@@ -286,12 +286,12 @@ def main() -> None:
     # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
     # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.launchertvtest'
+    test_package = 'io.freemytv.unitvchanneltest'
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = once(manifest_text, 'package="io.freemytv"',
         'package="' + test_package + '"', 'applicationId do launcher')
     manifest_text = once(manifest_text, 'android:versionName="1.3"',
-        'android:versionName="2.2-launcher-epg"', 'versao')
+        'android:versionName="2.3-channel-assist"', 'versao')
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Code remains in the io.freemytv Java namespace. Explicit components
@@ -338,7 +338,7 @@ def main() -> None:
     if 'android:name="io.freemytv.EpgActivity"' not in manifest_text:
         raise RuntimeError("EpgActivity nao registrada")
     manifest_text = manifest_text.replace('android:label="Free My TV"',
-        'android:label="Free My TV + EPG (Teste)"')
+        'android:label="Free My TV + Canais (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
 
     # HomeMode issues ADB operations against PACKAGE/CLASS components.
