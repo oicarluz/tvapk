@@ -44,9 +44,25 @@ jobs:
       - name: Verificar integrações, privilégios e persistência
         run: python3 tests/phase6_smoke.py projeto
       - name: Compilar sem chave TMDB embutida
+        env:
+          FREEMYTV_SIGNING_B64: ${{ secrets.FREEMYTV_KEYSTORE_BASE64 }}
+          FREEMYTV_KEYSTORE_PASS: ${{ secrets.FREEMYTV_KEYSTORE_PASS }}
         run: |
-          cd projeto
+          set -euo pipefail
           export ANDROID_HOME="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          if [ -n "${FREEMYTV_SIGNING_B64:-}" ]; then
+            if [ -z "${FREEMYTV_KEYSTORE_PASS:-}" ]; then
+              echo "::error::FREEMYTV_KEYSTORE_PASS ausente para keystore configurado" >&2
+              exit 1
+            fi
+            printf '%s' "$FREEMYTV_SIGNING_B64" | base64 --decode > projeto/signing-private.keystore
+            export FREEMYTV_KEYSTORE="$GITHUB_WORKSPACE/projeto/signing-private.keystore"
+            echo "Assinatura persistente ativada via Secrets."
+          else
+            echo "::warning::Sem Secrets: assinatura de teste provisória; não permite atualizar outra compilação sem reinstalar."
+          fi
+          cd projeto
+          trap 'rm -f signing-private.keystore' EXIT
           bash build.sh --generic
       - name: Validar APK, assinatura e manifesto
         shell: bash
