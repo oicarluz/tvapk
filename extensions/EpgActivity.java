@@ -279,8 +279,13 @@ public final class EpgActivity extends Activity {
             startActivity(intent);
             finish();
         }else{
-            Intent intent=new Intent(this,DiscoverActivity.class);
-            intent.putExtra("initial_kind",tab==2?1:2);
+            Intent intent;
+            if(tab==2){
+                intent=new Intent(this,MoviesActivity.class);
+            }else{
+                intent=new Intent(this,DiscoverActivity.class);
+                intent.putExtra("initial_kind",2);
+            }
             startActivity(intent);
             finish();
         }
