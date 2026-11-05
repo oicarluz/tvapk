@@ -268,7 +268,7 @@ def main() -> None:
     for path, source in changes.items():
         path.write_text(source, encoding="utf-8")
     ext = Path(__file__).resolve().parent / 'extensions'
-    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java', 'HomeChannelPins.java', 'HomeImageCache.java', 'HomeEpgSnapshot.java', 'HomeDashboardView.java', 'TvRemotePress.java', 'MediaCatalogActivity.java', 'MoviesActivity.java', 'SeriesActivity.java', 'HomeFavoritesActivity.java', 'HomeFavoritesTransfer.java'):
+    for name in ('DiscoverData.java', 'DiscoverActivity.java', 'EpgActivity.java', 'HomeChannelPins.java', 'HomeImageCache.java', 'HomeEpgSnapshot.java', 'HomeDashboardView.java', 'TvRemotePress.java', 'MediaCatalogActivity.java', 'MoviesActivity.java', 'SeriesActivity.java', 'HomeFavoritesActivity.java', 'HomeFavoritesTransfer.java', 'EpgFeedCache.java'):
         path = ext / name
         if not path.is_file():
             raise RuntimeError(f'Extensao ausente: {path}')
@@ -336,14 +336,14 @@ def main() -> None:
     # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
     # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.homep7test'
+    test_package = 'io.freemytv.homep8test'
     manifest_text = manifest.read_text(encoding='utf-8')
     manifest_text = once(manifest_text, 'package="io.freemytv"',
         'package="' + test_package + '"', 'applicationId do launcher')
     manifest_text = once(manifest_text, 'android:versionName="1.3"',
-        'android:versionName="3.1-rc-phase7"', 'versao')
+        'android:versionName="3.2-epg-phase8"', 'versao')
     manifest_text = once(manifest_text, 'android:versionCode="4"',
-        'android:versionCode="7"', 'versionCode do APK de homologacao')
+        'android:versionCode="8"', 'versionCode do APK de homologacao')
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
     # Code remains in the io.freemytv Java namespace. Explicit components
@@ -390,7 +390,7 @@ def main() -> None:
     if 'android:name="io.freemytv.EpgActivity"' not in manifest_text:
         raise RuntimeError("EpgActivity nao registrada")
     manifest_text = manifest_text.replace('android:label="Free My TV"',
-        'android:label="Free My TV Fase 7 (Teste)"')
+        'android:label="Free My TV Fase 8 (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
 
     # HomeMode issues ADB operations against PACKAGE/CLASS components.
@@ -426,7 +426,7 @@ def main() -> None:
     print('REAL HOME LAUNCHER: ' + test_package
           + ' with HOME/DEFAULT + LEANBACK/LAUNCHER on HomeActivity.')
     print('Settings opens from Home gear. Discover and EPG are internal.')
-    print('Phase 7: RC test package, protected classic fallback, diagnostic tools and CI verification.')
+    print('Phase 8: unified XMLTV cache, channel keys, retained TV focus, protected classic Home.')
 
 if __name__ == "__main__":
     main()
