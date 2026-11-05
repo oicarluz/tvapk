@@ -229,15 +229,34 @@ def main() -> None:
     home_source = home_activity.read_text(encoding='utf-8')
     home_source = once(home_source,
         '        if (RemoteKeys.onKey(this, event)) return true;',
-        '''        if (event.getAction() == KeyEvent.ACTION_DOWN
-                && (event.getKeyCode() == KeyEvent.KEYCODE_SEARCH
-                    || event.getKeyCode() == KeyEvent.KEYCODE_GUIDE)) {
-            startActivity(new Intent(this, DiscoverActivity.class));
-            return true;
+        '''        if (event.getAction() == KeyEvent.ACTION_DOWN) {
+            if (event.getKeyCode() == KeyEvent.KEYCODE_SEARCH) {
+                startActivity(new Intent(this, DiscoverActivity.class));
+                return true;
+            }
+            if (event.getKeyCode() == KeyEvent.KEYCODE_GUIDE) {
+                startActivity(new Intent(this, EpgActivity.class));
+                return true;
+            }
         }
         if (RemoteKeys.onKey(this, event)) return true;''',
         'atalho Descobrir')
     changes[home_activity] = home_source
+    # Preserve the original glass Home UI. Press DOWN from its open drawer
+    # to see the channel guide, without replacing or redrawing the home itself.
+    changes[home] = once(changes[home],
+        '                } else if (talkBack() && !widgets().isEmpty()) {',
+        '''                } else if (dy > 0) {
+                    activity.startActivity(new Intent(activity, EpgActivity.class));
+                    return;
+                } else if (talkBack() && !widgets().isEmpty()) {''',
+        'abrir guia abaixo do painel')
+    changes[home] = once(changes[home],
+        '        if (Prefs.weather()) drawWeatherCard(c, weatherCard);',
+        '''        rowTitle.setColor(drawerInk(0.90f));
+        c.drawText("↓  TV AO VIVO  ·  GRADE DE CANAIS E PROGRAMACAO", 80 * k, 1044 * k, rowTitle);
+        if (Prefs.weather()) drawWeatherCard(c, weatherCard);''',
+        'indicacao do EPG no painel')
     for path, source in changes.items():
         path.write_text(source, encoding="utf-8")
     ext = Path(__file__).resolve().parent / 'extensions'
@@ -263,51 +282,99 @@ def main() -> None:
     manifest.write_text(manifest_text_epg)
 
 
-    # ISOLATED TEST VARIANT: a separate Android application, not a HOME launcher.
-    # Do not touch the installed io.freemytv app or its data.
+    # REAL LAUNCHER VARIANT: can be selected as Android's HOME app.
+    # Uses a DISTINCT application ID for safe TCL testing; do not uninstall
+    # or replace the already-working io.freemytv application.
     old_package = 'io.freemytv'
-    test_package = 'io.freemytv.discoverepg'
+    test_package = 'io.freemytv.launchertvtest'
     manifest_text = manifest.read_text(encoding='utf-8')
-    manifest_text = manifest_text.replace('package="io.freemytv"', 'package="' + test_package + '"', 1)
-    manifest_text = manifest_text.replace('android:versionName="1.3"', 'android:versionName="2.1-epg-test"', 1)
+    manifest_text = once(manifest_text, 'package="io.freemytv"',
+        'package="' + test_package + '"', 'applicationId do launcher')
+    manifest_text = once(manifest_text, 'android:versionName="1.3"',
+        'android:versionName="2.2-launcher-epg"', 'versao')
     manifest_text = manifest_text.replace('io.freemytv.photos', test_package + '.photos')
     manifest_text = manifest_text.replace('io.freemytv.settings', test_package + '.settings')
-    # Preserve fully qualified class names after changing the manifest's package.
-    import re
+    # Code remains in the io.freemytv Java namespace. Explicit components
+    # are mandatory since the Android app ID differs from the source package.
     manifest_text = re.sub(r'android:name="\.(\w+)"',
         lambda match: 'android:name="' + old_package + '.' + match.group(1) + '"',
         manifest_text)
-    # Remove the HOME role from the test build, and prevent boot receivers from taking control.
-    manifest_text = manifest_text.replace(
-        '<category android:name="android.intent.category.HOME" />', '')
-    manifest_text = re.sub(
-        r'\s*<receiver\s+android:name="io\.freemytv\.HomeReceiver".*?</receiver>',
-        '', manifest_text, flags=re.DOTALL)
-    # Launch directly into Discover v2 from Android TV's app list.
-    manifest_text = manifest_text.replace(
-        'android:name="io.freemytv.DiscoverActivity"\n            android:process=":home"\n            android:exported="false"',
-        'android:name="io.freemytv.DiscoverActivity"\n            android:process=":home"\n            android:exported="true"')
-    manifest_text = manifest_text.replace(
-        'android:label="Descobrir"\n            android:screenOrientation="landscape"\n            android:theme="@style/FreeMyTV.Home" />',
-        '''android:label="Discover v2 (Teste)"
-            android:screenOrientation="landscape"
-            android:theme="@style/FreeMyTV.Home">
+    # Keep HOME and DEFAULT categories on the REAL HomeActivity.
+    # The icon also opens the original Home UI on Android TV and on phones.
+    home_start = manifest_text.index('android:name="io.freemytv.HomeActivity"')
+    home_end = manifest_text.index('</activity>', home_start)
+    home_part = manifest_text[home_start:home_end]
+    home_filter = '''            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>'''
+    if home_part.count(home_filter) != 1:
+        raise RuntimeError("Nao achei o filtro HOME original; abortando para proteger a TV.")
+    home_part = home_part.replace(home_filter, home_filter + '''
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-            </intent-filter>
-        </activity>''')
-    # Make the test application visibly distinct.
-    manifest_text = manifest_text.replace(
-        'android:label="Free My TV"', 'android:label="Free My TV TV+EPG (Teste)"')
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>''')
+    manifest_text = manifest_text[:home_start] + home_part + manifest_text[home_end:]
+    # The original Settings remain accessible from the HOME gear. They must
+    # NOT be the activity launched by the app icon (old test's TV/phone split).
+    settings_start = manifest_text.index('android:name="io.freemytv.SettingsActivity"')
+    settings_end = manifest_text.index('</activity>', settings_start)
+    settings_part = manifest_text[settings_start:settings_end]
+    settings_filter = '''            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>'''
+    if settings_part.count(settings_filter) != 1:
+        raise RuntimeError("Nao achei o filtro antigo de Settings; abortando.")
+    settings_part = settings_part.replace(settings_filter, '')
+    manifest_text = manifest_text[:settings_start] + settings_part + manifest_text[settings_end:]
+    # Discover and EPG stay internal; neither receives HOME or the app icon.
+    if 'android:name="io.freemytv.DiscoverActivity"' not in manifest_text:
+        raise RuntimeError("DiscoverActivity nao registrada")
+    if 'android:name="io.freemytv.EpgActivity"' not in manifest_text:
+        raise RuntimeError("EpgActivity nao registrada")
+    manifest_text = manifest_text.replace('android:label="Free My TV"',
+        'android:label="Free My TV + EPG (Teste)"')
     manifest.write_text(manifest_text, encoding='utf-8')
-    # Keep generated R.java in io.freemytv, where the original Java sources expect it.
+
+    # HomeMode issues ADB operations against PACKAGE/CLASS components.
+    # The original constant targeted io.freemytv and would accidentally
+    # switch back to the user's preexisting installation.
+    mode = root / 'app/src/io/freemytv/HomeMode.java'
+    mode_text = mode.read_text(encoding='utf-8')
+    mode_text = once(mode_text, 'static final String PKG = "io.freemytv";',
+        'static final String PKG = "' + test_package + '";',
+        'HomeMode pacote novo')
+    for kind in ('HomeActivity', 'SettingsActivity', 'RemoteKeyService', 'NowPlaying'):
+        mode_text = once(mode_text, 'PKG + "/" + PKG + ".' + kind + '"',
+            'PKG + "/io.freemytv.' + kind + '"', kind + ' componente')
+    mode_text = once(mode_text,
+        'PKG + "/" + PKG + (DREAM_ALONE ? ".ScreensaverAlone" : ".Screensaver")',
+        'PKG + "/io.freemytv" + (DREAM_ALONE ? ".ScreensaverAlone" : ".Screensaver")',
+        'screensaver componente')
+    mode_text = once(mode_text,
+        'PKG + "/" + PKG + (DREAM_ALONE ? ".Screensaver" : ".ScreensaverAlone")',
+        'PKG + "/io.freemytv" + (DREAM_ALONE ? ".Screensaver" : ".ScreensaverAlone")',
+        'screensaver alternativo')
+    mode.write_text(mode_text, encoding='utf-8')
+
+    # Native aapt must write R.java into the existing Java package.
     build = root / 'build.sh'
     build_text = build.read_text(encoding='utf-8')
-    build_text = once(build_text, '--java out/gen out/res.zip', '--java out/gen --custom-package io.freemytv out/res.zip', 'R.java package')
+    build_text = once(build_text,
+        '--java out/gen out/res.zip',
+        '--java out/gen --custom-package io.freemytv out/res.zip',
+        'pacote R.java')
     build.write_text(build_text, encoding='utf-8')
-    print('ISOLATED TEST: ' + test_package + ' without HOME role or boot receiver.')
-    print("OK: TMDB independente / pt-BR / UniTVnet / clipboard / acessibilidade opcional")
+
+    print('REAL HOME LAUNCHER: ' + test_package
+          + ' with HOME/DEFAULT + LEANBACK/LAUNCHER on HomeActivity.')
+    print('Settings opens from Home gear. Discover and EPG are internal.')
+    print('Safe parallel install: no auto-switch at installation.')
 
 if __name__ == "__main__":
     main()
