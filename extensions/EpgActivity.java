@@ -95,9 +95,16 @@ public final class EpgActivity extends Activity {
     }
     private static boolean isOpen(String s){
         String n=normalize(s);
-        return n.equals("globo")||n.startsWith("tv globo")||n.equals("sbt")||n.startsWith("sbt ")
-            ||n.equals("record")||n.startsWith("record ")||n.equals("band")
-            ||n.startsWith("band ")||n.startsWith("rede tv")
+        // Do not confuse a parent brand with its subscription channels.
+        if(hasAny(n,"globo news","globonews","record news","recordnews",
+            "band news","bandnews","bandsports","band sports","sbt news",
+            "sbtnews","sport","premiere","combate"))return false;
+        return n.equals("globo")||n.startsWith("globo ")||n.startsWith("tv globo")
+            ||n.equals("sbt")||n.startsWith("sbt ")
+            ||n.equals("record")||n.equals("record tv")
+            ||n.startsWith("record tv ")||n.startsWith("record ")
+            ||n.equals("band")||n.startsWith("band ")
+            ||n.startsWith("rede tv")
             ||n.equals("tv brasil")||n.equals("cultura")||n.startsWith("tv cultura")
             ||n.equals("gazeta")||n.equals("tv aparecida")||n.startsWith("tv senado")
             ||n.startsWith("tv camara")||n.equals("futura");
