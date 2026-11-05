@@ -10,6 +10,11 @@ HOME_COMPONENT="$PKG/io.freemytv.HomeActivity"
 OUT="emulator-results"
 mkdir -p "$OUT"
 adb wait-for-device
+adb shell wm size | tee "$OUT/display.txt"
+if ! grep -Eq 'Physical size: (1920x1080|1280x720|3840x2160)' "$OUT/display.txt"; then
+  echo "FAIL: emulator is not running a supported landscape TV profile" | tee -a "$OUT/checks.txt"
+  exit 1
+fi
 adb install -r "$APK" | tee "$OUT/install.txt"
 
 capture() {
